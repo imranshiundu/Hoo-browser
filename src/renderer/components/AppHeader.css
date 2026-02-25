@@ -1,0 +1,56 @@
+.app-header-bar {
+    height: 42px;
+    background: rgba(15, 20, 18, 0.85);
+    backdrop-filter: blur(16px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.app-header-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.app-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.app-header-btn {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.app-header-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.app-header-btn.close:hover {
+    color: #ff453a;
+    background: rgba(255, 69, 58, 0.1);
+}
+
+.app-header-divider {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 4px;
+}

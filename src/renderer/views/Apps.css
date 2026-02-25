@@ -1,0 +1,165 @@
+.apps-container {
+    height: 100vh;
+    padding: 60px 40px;
+    background: radial-gradient(circle at 50% 50%, rgba(20, 20, 25, 0.4) 0%, rgba(10, 10, 12, 0.8) 100%);
+    overflow-y: auto;
+    color: white;
+}
+
+.apps-header {
+    margin-bottom: 50px;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.apps-title-section {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.apps-header-icon {
+    width: 48px;
+    height: 48px;
+    color: rgba(255, 255, 255, 0.8);
+    opacity: 0.8;
+}
+
+.apps-header h1 {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -1px;
+    background: linear-gradient(to bottom, #fff, #999);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.apps-header p {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 5px 0 0 0;
+    font-size: 16px;
+}
+
+.apps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 25px;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.app-card {
+    position: relative;
+    padding: 30px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    overflow: hidden;
+}
+
+.app-card-glass {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.app-card:hover {
+    transform: translateY(-8px);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.app-card:hover .app-card-glass {
+    opacity: 1;
+}
+
+.app-icon-wrapper {
+    width: 80px;
+    height: 80px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.4s ease;
+}
+
+.app-card:hover .app-icon-wrapper {
+    transform: scale(1.1) rotate(5deg);
+}
+
+.app-info {
+    position: relative;
+    z-index: 1;
+    margin-bottom: 20px;
+}
+
+.app-info h3 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 10px 0;
+    color: #fff;
+}
+
+.app-info p {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.app-launch-btn {
+    margin-top: auto;
+    padding: 10px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    opacity: 0.6;
+}
+
+.app-card:hover .app-launch-btn {
+    opacity: 1;
+    background: #fff;
+    color: #000;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.6s ease forwards;
+}
