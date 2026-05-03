@@ -18,10 +18,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Quick Navigation
     navigateTo: (url: string) => ipcRenderer.invoke('navigate-to', url),
 
-    // Privacy Settings
+    // Privacy Settings and Browser Status
     updatePrivacySettings: (settings: any) => ipcRenderer.invoke('update-privacy-settings', settings),
     getInitialData: () => ipcRenderer.invoke('get-initial-data'),
     getSystemMetrics: () => ipcRenderer.invoke('get-system-metrics'),
+    getEncryptionStatus: () => ipcRenderer.invoke('get-encryption-status'),
+    getOSProfile: () => ipcRenderer.invoke('get-os-profile'),
+    getDownloads: () => ipcRenderer.invoke('get-downloads'),
+    getCrashedTabs: () => ipcRenderer.invoke('get-crashed-tabs'),
+    setSitePermission: (origin: string, permission: string, decision: 'allow' | 'deny' | 'ask') => ipcRenderer.invoke('set-site-permission', origin, permission, decision),
     nuclearWipe: () => ipcRenderer.invoke('nuclear-wipe'),
 
     // Sidebar
@@ -41,6 +46,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
     onSwitchToBrowser: (callback: (tabId: string) => void) => {
         ipcRenderer.on('switch-to-browser', (_event, tabId) => callback(tabId));
+    },
+    onDownloadUpdated: (callback: (download: any) => void) => {
+        ipcRenderer.on('download-updated', (_event, download) => callback(download));
+    },
+    onPermissionRequest: (callback: (request: any) => void) => {
+        ipcRenderer.on('permission-request', (_event, request) => callback(request));
+    },
+    onTabCrashed: (callback: (crash: any) => void) => {
+        ipcRenderer.on('tab-crashed', (_event, crash) => callback(crash));
     },
 
     // Auth
