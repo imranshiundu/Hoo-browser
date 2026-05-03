@@ -60,7 +60,7 @@ function getPageUrlForRequest(details: Electron.OnBeforeSendHeadersListenerDetai
 }
 
 function injectSitePolish(view: BrowserView): void {
-    view.webContents.insertCSS(`
+    void view.webContents.insertCSS(`
         html, body { scrollbar-width: thin !important; }
         ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
         ::-webkit-scrollbar-track { background: transparent !important; }
@@ -74,7 +74,7 @@ function injectSitePolish(view: BrowserView): void {
         body:has(input[name="q"]) .searchbox_searchbox__eaWKL {
             max-width: 820px !important;
         }
-    `).catch(() => undefined);
+    `).catch((): undefined => undefined);
 }
 
 function attachViewHandlers(tabId: string, view: BrowserView): void {
@@ -95,11 +95,11 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
         mainWindow?.webContents.send('tab-loading-state', tabId, true, url);
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com')) {
             view.webContents.setUserAgent(WHATSAPP_UA);
-            view.webContents.executeJavaScript(`
+            void view.webContents.executeJavaScript(`
                 Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
                 Object.defineProperty(navigator, 'userAgent', { get: () => '${WHATSAPP_UA}' });
                 console.log('[Hoo] Windows environment spoofed.');
-            `).catch(() => undefined);
+            `).catch((): undefined => undefined);
         } else {
             view.webContents.setUserAgent(getRandomUserAgent());
         }
@@ -121,7 +121,6 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
     view.webContents.on('page-title-updated', (_event, title): void => {
         const url = view.webContents.getURL();
         mainWindow?.webContents.send('tab-title-updated', tabId, title, url);
-
         const stData = StorageService.load();
         const targetTab = stData.tabs.find(t => t.id === tabId);
         if (targetTab) {
@@ -151,7 +150,7 @@ function restoreTabs(): void {
         browserViews.set(tab.id, view);
         applyPrivacyToSession(view.webContents.session);
         attachViewHandlers(tab.id, view);
-        if (tab.url) view.webContents.loadURL(tab.url);
+        if (tab.url) void view.webContents.loadURL(tab.url);
     });
 }
 
@@ -184,7 +183,7 @@ function createWindow(): void {
 
     mainWindow.on("closed", (): void => {
         mainWindow = null;
-        browserViews.forEach(view => {
+        browserViews.forEach((view): void => {
             if (!view.webContents.isDestroyed()) view.webContents.close();
         });
         browserViews.clear();
@@ -198,14 +197,14 @@ function createWindow(): void {
     mainWindow.on('unmaximize', triggerResize);
 }
 
-ipcMain.handle('hide-browser-view', async () => {
+ipcMain.handle('hide-browser-view', async (): Promise<void> => {
     if (!mainWindow) return;
-    browserViews.forEach(view => mainWindow!.removeBrowserView(view));
+    browserViews.forEach((view): void => mainWindow!.removeBrowserView(view));
     activeTabId = null;
     manualBounds = null;
 });
 
-ipcMain.handle('update-view-bounds', async (_event, bounds: { x: number, y: number, width: number, height: number }) => {
+ipcMain.handle('update-view-bounds', async (_event, bounds: { x: number, y: number, width: number, height: number }): Promise<void> => {
     manualBounds = {
         x: Math.max(0, Math.floor(bounds.x)),
         y: Math.max(0, Math.floor(bounds.y)),
@@ -215,16 +214,16 @@ ipcMain.handle('update-view-bounds', async (_event, bounds: { x: number, y: numb
     updateBrowserViewBounds();
 });
 
-ipcMain.handle('window-minimize', () => mainWindow?.minimize());
-ipcMain.handle('window-maximize', () => {
+ipcMain.handle('window-minimize', async (): Promise<void> => { mainWindow?.minimize(); });
+ipcMain.handle('window-maximize', async (): Promise<void> => {
     if (mainWindow?.isMaximized()) mainWindow.unmaximize();
     else mainWindow?.maximize();
 });
-ipcMain.handle('window-close', () => mainWindow?.close());
-ipcMain.handle('window-reload', () => mainWindow?.webContents.reloadIgnoringCache());
-ipcMain.handle('check-for-updates', async () => checkForHooUpdates());
+ipcMain.handle('window-close', async (): Promise<void> => { mainWindow?.close(); });
+ipcMain.handle('window-reload', async (): Promise<void> => { mainWindow?.webContents.reloadIgnoringCache(); });
+ipcMain.handle('check-for-updates', async (): Promise<any> => checkForHooUpdates());
 
-ipcMain.handle('get-performance-snapshot', async () => getPerformanceSnapshot({
+ipcMain.handle('get-performance-snapshot', async (): Promise<any> => getPerformanceSnapshot({
     mainWindow,
     activeBrowserViews: activeTabId ? 1 + (splitTabId ? 1 : 0) : 0,
     totalBrowserViews: browserViews.size,
@@ -297,29 +296,33 @@ function showBrowserView(tabId: string, isSplit = false): void {
         splitTabId = null;
     }
 
-    browserViews.forEach(view => mainWindow!.removeBrowserView(view));
-    if (activeTabId) {
-        const view = browserViews.get(activeTabId);
-        if (view) mainWindow.addBrowserView(view);
-    }
+    const needed = new Set<string>([tabId]);
+    if (splitTabId) needed.add(splitTabId);
+
+    browserViews.forEach((view, id): void => {
+        if (!needed.has(id)) mainWindow!.removeBrowserView(view);
+    });
+
+    const activeView = browserViews.get(tabId);
+    if (activeView && !mainWindow.getBrowserViews().includes(activeView)) mainWindow.addBrowserView(activeView);
     if (splitTabId) {
-        const view = browserViews.get(splitTabId);
-        if (view) mainWindow.addBrowserView(view);
+        const splitView = browserViews.get(splitTabId);
+        if (splitView && !mainWindow.getBrowserViews().includes(splitView)) mainWindow.addBrowserView(splitView);
     }
     updateBrowserViewBounds();
 }
 
-ipcMain.handle('update-privacy-settings', async (_event, settings) => {
+ipcMain.handle('update-privacy-settings', async (_event, settings): Promise<any> => {
     privacySettings = { ...privacySettings, ...settings };
     StorageService.save({ settings: privacySettings });
     if (settings.dataRetention) StorageService.cleanupHistory(settings.dataRetention);
     return privacySettings;
 });
 
-ipcMain.handle('mega-login', async (_event, email: string, pass: string) => MegaSyncService.login(email, pass));
-ipcMain.handle('mega-logout', async () => MegaSyncService.logout());
+ipcMain.handle('mega-login', async (_event, email: string, pass: string): Promise<any> => MegaSyncService.login(email, pass));
+ipcMain.handle('mega-logout', async (): Promise<any> => MegaSyncService.logout());
 
-ipcMain.handle('start-openclaw', async () => {
+ipcMain.handle('start-openclaw', async (): Promise<any> => {
     openClawLoaded = true;
     const configuredCommand = process.env.HOO_OPENCLAW_COMMAND;
     const openclawScript = path.join(os.homedir(), 'openclaw.sh');
@@ -327,15 +330,15 @@ ipcMain.handle('start-openclaw', async () => {
         return { ok: false, error: 'OpenClaw is not configured. Set HOO_OPENCLAW_COMMAND or create ~/openclaw.sh. Hoo no longer ships with a developer-specific local path.' };
     }
     const cmd = configuredCommand || `bash "${openclawScript}"`;
-    return new Promise((resolve) => {
-        exec(cmd, (err, stdout, stderr) => {
+    return new Promise((resolve): void => {
+        exec(cmd, (err, stdout, stderr): void => {
             if (err) resolve({ ok: false, error: stderr || err.message });
             else resolve({ ok: true });
         });
     });
 });
 
-ipcMain.handle('get-initial-data', async () => {
+ipcMain.handle('get-initial-data', async (): Promise<any> => {
     StorageService.cleanupHistory(privacySettings.dataRetention as any);
     const data = StorageService.load();
     return { tabs: data.tabs, history: data.history, downloads: data.downloads, crashedTabs: data.crashedTabs, settings: privacySettings, activeTabId: data.activeTabId };
@@ -349,14 +352,14 @@ function createBrowserViewForTab(tabId: string, partition?: string): BrowserView
     return view;
 }
 
-ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isApp?: boolean, title?: string) => {
+ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isApp?: boolean, title?: string): Promise<string | null> => {
     if (!mainWindow) return null;
     const tabId = Date.now().toString();
     const view = createBrowserViewForTab(tabId, partition);
     showBrowserView(tabId);
 
     if (url && url !== 'about:blank') {
-        view.webContents.loadURL(url);
+        void view.webContents.loadURL(url);
         const stData = StorageService.load();
         stData.history.push({ url, title: url, timestamp: Date.now() });
         StorageService.save({ history: stData.history });
@@ -368,12 +371,12 @@ ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isA
     return tabId;
 });
 
-ipcMain.handle('switch-tab', async (_event, tabId: string) => {
+ipcMain.handle('switch-tab', async (_event, tabId: string): Promise<string> => {
     const data = StorageService.load();
     const tab = data.tabs.find(t => t.id === tabId);
     if (tab && !browserViews.has(tabId)) {
         const view = createBrowserViewForTab(tabId, tab.partition);
-        if (tab.url && tab.url !== 'about:blank') view.webContents.loadURL(tab.url);
+        if (tab.url && tab.url !== 'about:blank') void view.webContents.loadURL(tab.url);
     }
     showBrowserView(tabId);
     if (tab) tab.lastActiveAt = Date.now();
@@ -381,19 +384,19 @@ ipcMain.handle('switch-tab', async (_event, tabId: string) => {
     return tabId;
 });
 
-ipcMain.handle('set-mosaic-view', async (_event, tabId1: string, tabId2: string) => {
+ipcMain.handle('set-mosaic-view', async (_event, tabId1: string, tabId2: string): Promise<any> => {
     activeTabId = tabId1;
     splitTabId = tabId2;
     showBrowserView(tabId1, true);
     return { activeTabId, splitTabId };
 });
 
-ipcMain.handle('clear-mosaic-view', async () => {
+ipcMain.handle('clear-mosaic-view', async (): Promise<void> => {
     splitTabId = null;
     showBrowserView(activeTabId || '');
 });
 
-ipcMain.handle('get-system-metrics', async () => getPerformanceSnapshot({
+ipcMain.handle('get-system-metrics', async (): Promise<any> => getPerformanceSnapshot({
     mainWindow,
     activeBrowserViews: activeTabId ? 1 + (splitTabId ? 1 : 0) : 0,
     totalBrowserViews: browserViews.size,
@@ -401,21 +404,25 @@ ipcMain.handle('get-system-metrics', async () => getPerformanceSnapshot({
     aiLoaded: openClawLoaded
 }));
 
-ipcMain.handle('nuclear-wipe', async () => {
+ipcMain.handle('nuclear-wipe', async (): Promise<void> => {
     await session.defaultSession.clearStorageData();
     StorageService.wipeAll();
     app.relaunch();
     app.exit(0);
 });
 
-ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string) => {
+ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promise<void> => {
+    if (url === 'about:blank') {
+        mainWindow?.webContents.send('switch-to-home');
+        return;
+    }
     const view = browserViews.get(tabId);
     if (!view || view.webContents.isDestroyed()) return;
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) finalUrl = 'https://' + url;
     try {
         if (await isMaliciousUrl(finalUrl)) return;
-        await view.webContents.loadURL(finalUrl);
+        void view.webContents.loadURL(finalUrl);
         const stData = StorageService.load();
         const tab = stData.tabs.find(t => t.id === tabId);
         if (tab) {
@@ -431,19 +438,19 @@ ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string) => {
     }
 });
 
-ipcMain.handle('go-back', async (_event, tabId: string) => {
+ipcMain.handle('go-back', async (_event, tabId: string): Promise<void> => {
     const view = browserViews.get(tabId);
     const history = view?.webContents.navigationHistory;
     if (history?.canGoBack()) history.goBack();
 });
-ipcMain.handle('go-forward', async (_event, tabId: string) => {
+ipcMain.handle('go-forward', async (_event, tabId: string): Promise<void> => {
     const view = browserViews.get(tabId);
     const history = view?.webContents.navigationHistory;
     if (history?.canGoForward()) history.goForward();
 });
-ipcMain.handle('reload', async (_event, tabId: string) => browserViews.get(tabId)?.webContents.reload());
+ipcMain.handle('reload', async (_event, tabId: string): Promise<void> => { browserViews.get(tabId)?.webContents.reload(); });
 
-ipcMain.handle('rename-tab', async (_event, tabId: string, title: string) => {
+ipcMain.handle('rename-tab', async (_event, tabId: string, title: string): Promise<void> => {
     const data = StorageService.load();
     const tab = data.tabs.find(t => t.id === tabId);
     if (tab) {
@@ -452,7 +459,7 @@ ipcMain.handle('rename-tab', async (_event, tabId: string, title: string) => {
     }
 });
 
-ipcMain.handle('close-tab', async (_event, tabId: string) => {
+ipcMain.handle('close-tab', async (_event, tabId: string): Promise<void> => {
     const view = browserViews.get(tabId);
     if (!view) return;
     if (!view.webContents.isDestroyed()) view.webContents.close();
@@ -464,9 +471,9 @@ ipcMain.handle('close-tab', async (_event, tabId: string) => {
     if (activeTabId === tabId && browserViews.size > 0) showBrowserView(Array.from(browserViews.keys())[0]);
 });
 
-ipcMain.handle('toggle-sidebar', async () => updateBrowserViewBounds());
+ipcMain.handle('toggle-sidebar', async (): Promise<void> => updateBrowserViewBounds());
 
-ipcMain.handle('navigate-to', async (_event, url: string) => {
+ipcMain.handle('navigate-to', async (_event, url: string): Promise<string | null> => {
     if (!mainWindow) return null;
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) finalUrl = 'https://' + url;
@@ -474,7 +481,7 @@ ipcMain.handle('navigate-to', async (_event, url: string) => {
     const tabId = Date.now().toString();
     const view = createBrowserViewForTab(tabId);
     showBrowserView(tabId);
-    view.webContents.loadURL(finalUrl);
+    void view.webContents.loadURL(finalUrl);
     const data = StorageService.load();
     data.tabs.push({ id: tabId, type: 'browser', title: 'Loading...', url: finalUrl, lastActiveAt: Date.now() });
     StorageService.save({ tabs: data.tabs, activeTabId: tabId });
@@ -483,4 +490,4 @@ ipcMain.handle('navigate-to', async (_event, url: string) => {
 });
 
 app.whenReady().then(createWindow);
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.on("window-all-closed", (): void => { if (process.platform !== "darwin") app.quit(); });
