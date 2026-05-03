@@ -8,6 +8,8 @@ import { StorageService, StorageData } from "./storage";
 import { setupAuthHandlers } from "./auth";
 import { MegaSyncService } from "./sync";
 
+app.setName("Hoo Browser");
+
 let mainWindow: BrowserWindow | null = null;
 const browserViews: Map<string, BrowserView> = new Map();
 let activeTabId: string | null = null;
@@ -52,7 +54,7 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
             view.webContents.executeJavaScript(`
                 Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
                 Object.defineProperty(navigator, 'userAgent', { get: () => '${WHATSAPP_UA}' });
-                console.log('[Zen] Windows environment spoofed.');
+                console.log('[Hoo] Windows environment spoofed.');
             `);
         } else {
             view.webContents.setUserAgent(getRandomUserAgent());
@@ -108,8 +110,10 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         height: 800,
         width: 1400,
-        frame: false, // Frameless window
-        titleBarStyle: 'hidden', // Hide title bar but keep traffic lights on Mac (if any)
+        frame: false,
+        title: "Hoo Browser",
+        backgroundColor: "#0E1111",
+        titleBarStyle: 'hidden',
         webPreferences: {
             preload: path.join(__dirname, "../preload/preload.js"),
             nodeIntegration: false,
@@ -119,7 +123,9 @@ function createWindow() {
     });
 
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
-    mainWindow.webContents.openDevTools(); // Temporary for development
+    if (!app.isPackaged && process.env.HOO_OPEN_DEVTOOLS === '1') {
+        mainWindow.webContents.openDevTools();
+    }
 
     setupPrivacyFilters();
     setupAuthHandlers(mainWindow);
@@ -188,7 +194,7 @@ function applyPrivacyToSession(ses: Electron.Session) {
     ses.webRequest.onBeforeRequest(filter, (details, callback) => {
         // 1. Ad Shield logic
         if (privacySettings.adShield && shouldBlockRequest(details.url)) {
-            console.log('[Zen Shield] Blocked:', details.url);
+            console.log('[Hoo Shield] Blocked:', details.url);
             return callback({ cancel: true });
         }
 
@@ -457,7 +463,7 @@ ipcMain.handle('get-system-metrics', async () => {
 });
 
 ipcMain.handle('nuclear-wipe', async () => {
-    console.log('☢️ NUCLEAR WIPE INITIATED');
+    console.log('NUCLEAR WIPE INITIATED');
 
     // 1. Clear session data (Cookies, Cache, etc.)
     await session.defaultSession.clearStorageData();
