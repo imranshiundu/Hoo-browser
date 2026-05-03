@@ -14,6 +14,7 @@ import { shouldBlockForLowData } from "./network-policy";
 app.setName("Hoo Browser");
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-systemd-scope');
+app.commandLine.appendSwitch('no-sandbox');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -51,30 +52,23 @@ function resolveAssetPath(...segments: string[]): string {
     return distAsset;
 }
 
-function getUrlForHeaders(detailsUrl: string, fallbackContents?: Electron.WebContents): string {
-    return detailsUrl || fallbackContents?.getURL() || '';
-}
-
-function getPageUrlForRequest(details: Electron.OnBeforeSendHeadersListenerDetails | Electron.OnHeadersReceivedListenerDetails): string {
-    return details.webContents?.getURL?.() || details.referrer || '';
+function getPageUrlForRequest(details: any): string {
+    return details?.webContents?.getURL?.() || details?.referrer || '';
 }
 
 function injectSitePolish(view: BrowserView): void {
-    void view.webContents.insertCSS(`
-        html, body { scrollbar-width: thin !important; }
-        ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
-        ::-webkit-scrollbar-track { background: transparent !important; }
-        ::-webkit-scrollbar-thumb { background: rgba(140,140,140,.28) !important; border-radius: 999px !important; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(180,180,180,.42) !important; }
-        @-moz-document url-prefix("https://duckduckgo.com") {
+    try {
+        void Promise.resolve(view.webContents.insertCSS(`
+            html, body { scrollbar-width: thin !important; }
+            ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
+            ::-webkit-scrollbar-track { background: transparent !important; }
+            ::-webkit-scrollbar-thumb { background: rgba(140,140,140,.28) !important; border-radius: 999px !important; }
+            ::-webkit-scrollbar-thumb:hover { background: rgba(180,180,180,.42) !important; }
             form[role="search"], [data-testid="searchbox"], .searchbox_searchbox__eaWKL { max-width: 820px !important; }
-        }
-        body:has(input[name="q"]) form[role="search"],
-        body:has(input[name="q"]) [data-testid="searchbox"],
-        body:has(input[name="q"]) .searchbox_searchbox__eaWKL {
-            max-width: 820px !important;
-        }
-    `).catch((): undefined => undefined);
+        `)).catch((): undefined => undefined);
+    } catch {
+        // Site CSS injection is cosmetic; never break page loading for it.
+    }
 }
 
 function attachViewHandlers(tabId: string, view: BrowserView): void {
@@ -143,7 +137,7 @@ function restoreTabs(): void {
                 nodeIntegration: false,
                 contextIsolation: true,
                 partition: tab.partition ? `persist:${tab.partition}` : undefined,
-                sandbox: true,
+                sandbox: false,
                 backgroundThrottling: false,
             }
         });
@@ -160,7 +154,7 @@ function createWindow(): void {
         width: 1400,
         frame: false,
         title: "Hoo Browser",
-        icon: resolveAssetPath('assets/branding/hoo-app-icon.svg'),
+        icon: resolveAssetPath('assets/branding/hoo-app-icon.png'),
         backgroundColor: "#0E1111",
         titleBarStyle: 'hidden',
         webPreferences: {
@@ -168,6 +162,7 @@ function createWindow(): void {
             nodeIntegration: false,
             contextIsolation: true,
             webviewTag: false,
+            sandbox: false,
             backgroundThrottling: false,
         },
     });
@@ -247,18 +242,15 @@ function applyPrivacyToSession(ses: Electron.Session): void {
         const lengthHeader = details.responseHeaders?.['content-length'] || details.responseHeaders?.['Content-Length'];
         const lengthValue = Array.isArray(lengthHeader) ? Number(lengthHeader[0]) : Number(lengthHeader);
         trackNetworkBytes(lengthValue);
-        callback({ responseHeaders: stripJunkResponseHeaders(details.responseHeaders, details.url, getPageUrlForRequest(details)) });
+        const responseHeaders = stripJunkResponseHeaders(details.responseHeaders as any, details.url, getPageUrlForRequest(details)) as any;
+        callback({ responseHeaders });
     });
 
     ses.webRequest.onBeforeSendHeaders(filter, (details, callback): void => {
-        const targetUrl = getUrlForHeaders(details.url);
-        details.requestHeaders = stripJunkRequestHeaders(details.requestHeaders, details.url, getPageUrlForRequest(details));
-        if (privacySettings.deepSpoof && targetUrl.includes('web.whatsapp.com')) {
-            details.requestHeaders['User-Agent'] = WHATSAPP_UA;
-        } else {
-            details.requestHeaders['User-Agent'] = getRandomUserAgent();
-        }
-        callback({ requestHeaders: details.requestHeaders });
+        const requestHeaders = stripJunkRequestHeaders(details.requestHeaders as any, details.url, getPageUrlForRequest(details)) as Record<string, string>;
+        if (privacySettings.deepSpoof && details.url.includes('web.whatsapp.com')) requestHeaders['User-Agent'] = WHATSAPP_UA;
+        else requestHeaders['User-Agent'] = getRandomUserAgent();
+        callback({ requestHeaders });
     });
 }
 
@@ -345,7 +337,7 @@ ipcMain.handle('get-initial-data', async (): Promise<any> => {
 });
 
 function createBrowserViewForTab(tabId: string, partition?: string): BrowserView {
-    const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partition ? `persist:${partition}` : undefined, sandbox: true, backgroundThrottling: false } });
+    const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partition ? `persist:${partition}` : undefined, sandbox: false, backgroundThrottling: false } });
     browserViews.set(tabId, view);
     applyPrivacyToSession(view.webContents.session);
     attachViewHandlers(tabId, view);
