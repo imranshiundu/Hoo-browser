@@ -46,6 +46,8 @@
 .nav-btn:active { transform: scale(.96); }
 
 .shield-on svg { color: #00d46a; }
+.split-active { background: rgba(255,106,0,.18); color: #ffb06a; }
+.split-active svg { color: #ff8b2b; }
 
 .address-form {
     flex: 1 1 auto;
@@ -116,13 +118,15 @@
 .address-input::placeholder { color: rgba(255, 255, 255, 0.46); }
 
 .nav-menu-wrap,
-.tools-menu-wrap {
+.tools-menu-wrap,
+.split-menu-wrap {
     position: relative;
     flex: 0 0 auto;
 }
 
 .bookmarks-popover,
-.tools-popover {
+.tools-popover,
+.split-popover {
     position: absolute;
     top: 38px;
     right: 0;
@@ -139,7 +143,8 @@
     backdrop-filter: blur(18px);
 }
 
-.bookmarks-popover {
+.bookmarks-popover,
+.split-popover {
     width: 330px;
     max-height: 420px;
 }
@@ -148,14 +153,16 @@
     width: 180px;
 }
 
-.bookmarks-popover strong {
+.bookmarks-popover strong,
+.split-popover strong {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.86);
     padding: 4px 6px 8px;
 }
 
 .bookmarks-popover button,
-.tools-popover button {
+.tools-popover button,
+.split-popover button {
     min-width: 0;
     border: 0;
     border-radius: 9px;
@@ -175,21 +182,26 @@
 }
 
 .bookmarks-popover button:hover,
-.tools-popover button:hover {
+.tools-popover button:hover,
+.split-popover button:hover {
     background: rgba(255, 255, 255, 0.08);
 }
 
 .bookmarks-popover span,
-.bookmarks-popover small {
+.bookmarks-popover small,
+.split-popover span,
+.split-popover small {
     display: block;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-.bookmarks-popover span { font-size: 13px; }
+.bookmarks-popover span,
+.split-popover span { font-size: 13px; }
 
 .bookmarks-popover small,
+.split-popover small,
 .empty-bookmarks {
     font-size: 11px;
     color: rgba(255, 255, 255, 0.45);
