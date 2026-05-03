@@ -20,8 +20,7 @@ const App: React.FC = () => {
             if (!window.electronAPI?.getInitialData) return;
             const data: { tabs: Tab[], activeTabId?: string | null } = await window.electronAPI.getInitialData();
             const browserTabs = (data.tabs || []).filter(t => t.type === 'browser');
-            const nextTabs = [HOME_TAB, ...browserTabs];
-            setTabs(nextTabs);
+            setTabs([HOME_TAB, ...browserTabs]);
             setActiveTabId(data.activeTabId && browserTabs.some(t => t.id === data.activeTabId) ? data.activeTabId : 'home');
         };
         loadInitialData();
@@ -54,7 +53,7 @@ const App: React.FC = () => {
             setTabs(prev => prev.map(t => t.id === tabId ? { ...t, title, url: url || t.url } : t));
         });
         window.electronAPI?.onSwitchToBrowser((tabId) => {
-            setTabs(prev => prev.find(t => t.id === tabId) ? prev : [...prev, { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
+            setTabs(prev => prev.find(t => t.id === tabId) ? prev : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
             setActiveTabId(tabId);
         });
     }, []);
@@ -121,7 +120,6 @@ const App: React.FC = () => {
                         onCreateTab={() => handleCreateTab()}
                     />
                 )}
-
                 <section className="browser-stage">
                     {activeTab.type === 'browser' ? (
                         <Browser
@@ -130,9 +128,8 @@ const App: React.FC = () => {
                             onSwitchTab={handleSwitchTab}
                             onCloseTab={handleCloseTab}
                             onCreateTab={() => handleCreateTab()}
-                            onUpdateTabs={(update: any) => {
-                                if (typeof update === 'function') setTabs(prev => [HOME_TAB, ...update(prev.filter(t => t.type === 'browser'))]);
-                            }}
+                            onUpdateTabs={() => undefined}
+                            onOpenSettings={() => setSettingsOpen(true)}
                         />
                     ) : (
                         <Home onNavigate={handleNavigateFromHome} onOpenSettings={() => setSettingsOpen(true)} />
