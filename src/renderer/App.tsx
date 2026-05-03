@@ -20,8 +20,11 @@ const App: React.FC = () => {
             if (!window.electronAPI?.getInitialData) return;
             const data: { tabs: Tab[], activeTabId?: string | null } = await window.electronAPI.getInitialData();
             const browserTabs = (data.tabs || []).filter(t => t.type === 'browser');
-            setTabs([HOME_TAB, ...browserTabs]);
-            setActiveTabId(data.activeTabId && browserTabs.some(t => t.id === data.activeTabId) ? data.activeTabId : 'home');
+            const restoredActive = data.activeTabId && browserTabs.some(t => t.id === data.activeTabId)
+                ? data.activeTabId
+                : browserTabs[0]?.id;
+            setTabs(browserTabs.length ? browserTabs : [HOME_TAB]);
+            setActiveTabId(restoredActive || 'home');
         };
         void loadInitialData();
     }, []);
@@ -36,7 +39,7 @@ const App: React.FC = () => {
             }
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') {
                 e.preventDefault();
-                setActiveTabId('home');
+                openHomeTab();
             }
             if (e.key === 'Escape' && settingsOpen) {
                 e.preventDefault();
@@ -45,7 +48,7 @@ const App: React.FC = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [settingsOpen]);
+    }, [settingsOpen, tabs]);
 
     useEffect(() => {
         if (settingsOpen) {
@@ -61,7 +64,9 @@ const App: React.FC = () => {
             setTabs(prev => prev.map(t => t.id === tabId ? { ...t, title, url: url || t.url } : t));
         });
         window.electronAPI?.onSwitchToBrowser((tabId) => {
-            setTabs(prev => prev.find(t => t.id === tabId) ? prev : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
+            setTabs(prev => prev.find(t => t.id === tabId)
+                ? prev.filter(t => t.id !== 'home')
+                : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
             setActiveTabId(tabId);
         });
     }, []);
@@ -69,13 +74,16 @@ const App: React.FC = () => {
     const openHomeTab = (): void => {
         setTabs(prev => prev.some(t => t.id === 'home') ? prev : [HOME_TAB, ...prev]);
         setActiveTabId('home');
+        setSplitTabId(null);
     };
 
     const handleNavigateFromHome = async (url: string): Promise<void> => {
         if (!window.electronAPI?.navigateTo) return;
         const tabId = await window.electronAPI.navigateTo(url);
         if (!tabId) return;
-        setTabs(prev => prev.find(t => t.id === tabId) ? prev : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url }]);
+        setTabs(prev => prev.find(t => t.id === tabId)
+            ? prev.filter(t => t.id !== 'home')
+            : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url }]);
         setActiveTabId(tabId);
     };
 
@@ -83,6 +91,7 @@ const App: React.FC = () => {
         if (tabId === activeTabId) return;
         const targetTab = tabs.find(t => t.id === tabId);
         if (targetTab?.type === 'browser') await window.electronAPI?.switchTab(tabId);
+        else await window.electronAPI?.hideBrowserView?.();
         setActiveTabId(tabId);
         setSplitTabId(null);
     };
@@ -102,31 +111,27 @@ const App: React.FC = () => {
         const targetTab = tabs.find(t => t.id === tabId);
         if (!targetTab || targetTab.type !== 'browser') return;
         await window.electronAPI?.closeTab(tabId);
-        const remaining = tabs.filter(t => t.id !== tabId);
-        const remainingBrowserTabs = remaining.filter(t => t.type === 'browser');
-        setTabs(remainingBrowserTabs.length ? [HOME_TAB, ...remainingBrowserTabs] : [HOME_TAB]);
+        const remainingBrowserTabs = tabs.filter(t => t.id !== tabId && t.type === 'browser');
+        setTabs(remainingBrowserTabs.length ? remainingBrowserTabs : [HOME_TAB]);
         if (activeTabId === tabId) setActiveTabId(remainingBrowserTabs[remainingBrowserTabs.length - 1]?.id || 'home');
     };
 
     const browserTabs = tabs.filter(t => t.type === 'browser');
-    const stripTabs = [HOME_TAB, ...browserTabs];
-    const showBrowserChrome = true;
+    const stripTabs = tabs;
 
     return (
         <div className="app-shell">
             <TitleBar />
             <main className="browser-shell">
-                {showBrowserChrome && (
-                    <TabStrip
-                        tabs={stripTabs}
-                        activeTabId={activeTabId}
-                        splitTabId={splitTabId}
-                        onSwitchTab={(id): void => { void handleSwitchTab(id); }}
-                        onSplitTab={(id): void => { void handleSplitTab(id); }}
-                        onCloseTab={(id): void => { void handleCloseTab(id); }}
-                        onCreateTab={openHomeTab}
-                    />
-                )}
+                <TabStrip
+                    tabs={stripTabs}
+                    activeTabId={activeTabId}
+                    splitTabId={splitTabId}
+                    onSwitchTab={(id): void => { void handleSwitchTab(id); }}
+                    onSplitTab={(id): void => { void handleSplitTab(id); }}
+                    onCloseTab={(id): void => { void handleCloseTab(id); }}
+                    onCreateTab={openHomeTab}
+                />
                 <section className="browser-stage">
                     {activeTab.type === 'browser' ? (
                         <Browser
