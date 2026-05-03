@@ -1,7 +1,8 @@
 {
-  "name": "zen-browser",
-  "version": "0.1.0",
-  "description": "A desktop browser experiment built with Electron, focused on practical privacy controls, Linux web-app compatibility, and local-first AI assistance.",
+  "name": "hoo-browser",
+  "version": "0.2.0",
+  "productName": "Hoo Browser",
+  "description": "Owl-guided, DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and Linux-first freedom.",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
@@ -11,17 +12,43 @@
     "start:unsafe-no-sandbox": "electron . --no-sandbox",
     "dev:start": "npm run build && npm run start",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run build"
+    "verify": "npm run typecheck && npm run build",
+    "dist": "npm run build:prod && electron-builder --linux AppImage deb",
+    "dist:appimage": "npm run build:prod && electron-builder --linux AppImage",
+    "dist:deb": "npm run build:prod && electron-builder --linux deb"
   },
   "keywords": [
     "electron",
     "browser",
     "privacy",
+    "duckduckgo",
     "linux",
-    "desktop-app"
+    "desktop-app",
+    "hoo"
   ],
   "author": "Imran Shiundu",
   "license": "MIT",
+  "build": {
+    "appId": "com.imranshiundu.hoo-browser",
+    "productName": "Hoo Browser",
+    "artifactName": "Hoo-Browser-${version}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "synopsis": "Owl-guided privacy-first desktop browser",
+      "description": "Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and a calm owl-guided browsing experience."
+    }
+  },
   "devDependencies": {
     "@types/electron": "^1.4.38",
     "@types/node": "^25.2.0",
