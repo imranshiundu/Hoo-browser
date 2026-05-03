@@ -65,7 +65,7 @@ interface ElectronAPI {
     switchTab: (tabId: string) => Promise<string>;
     closeTab: (tabId: string) => Promise<void>;
     renameTab: (tabId: string, title: string) => Promise<void>;
-    navigateTo: (url: string) => Promise<void>;
+    navigateTo: (url: string) => Promise<string | null>;
     updatePrivacySettings: (settings: PrivacySettings) => Promise<PrivacySettings>;
     getInitialData: () => Promise<{ tabs: any[], history: any[], downloads?: any[], crashedTabs?: any[], settings: PrivacySettings }>;
     getSystemMetrics: () => Promise<HooPerformanceSnapshot>;
