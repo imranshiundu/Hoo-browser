@@ -68,10 +68,11 @@ declare global {
         renameTab: (tabId: string, title: string) => Promise<void>;
         navigateTo: (url: string) => Promise<string | null>;
         updatePrivacySettings: (settings: PrivacySettings) => Promise<PrivacySettings>;
-        getInitialData: () => Promise<{ tabs: any[], history: any[], downloads?: any[], crashedTabs?: any[], settings: PrivacySettings }>;
+        getInitialData: () => Promise<{ tabs: any[], history: any[], downloads?: any[], crashedTabs?: any[], settings: PrivacySettings, activeTabId?: string | null }>;
         getSystemMetrics: () => Promise<HooPerformanceSnapshot>;
         getPerformanceSnapshot: () => Promise<HooPerformanceSnapshot>;
         checkForUpdates: () => Promise<HooUpdateResult>;
+        nuclearWipe: () => Promise<void>;
         toggleSidebar: (collapsed: boolean) => Promise<void>;
         hideBrowserView: () => Promise<void>;
         minimize: () => Promise<void>;
