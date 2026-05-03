@@ -1,17 +1,33 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './Home.css';
-import { Search, Github, MessageSquare, Mail, Video, Newspaper, Settings } from 'lucide-react';
+import { Search, Github, MessageSquare, Mail, Video, Newspaper, Settings, BookmarkPlus, Trash2 } from 'lucide-react';
+import { Bookmark, getFaviconUrl } from '../types';
 
 const hooIcon = require('../assets/branding/hoo-app-icon.svg');
-const hooWallpaper = require('../assets/branding/hoo-wallpaper.svg');
+const hooWallpaper = require('../assets/branding/hoo-owl-wallpaper.png');
 
 interface HomeProps {
     onNavigate?: (url: string) => void;
     onOpenSettings?: () => void;
 }
 
+const BOOKMARK_KEY = 'hoo:bookmarks';
+
+const readBookmarks = (): Bookmark[] => {
+    try {
+        return JSON.parse(localStorage.getItem(BOOKMARK_KEY) || '[]');
+    } catch {
+        return [];
+    }
+};
+
 const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [bookmarks, setBookmarks] = useState<Bookmark[]>(readBookmarks);
+
+    useEffect(() => {
+        localStorage.setItem(BOOKMARK_KEY, JSON.stringify(bookmarks.slice(0, 18)));
+    }, [bookmarks]);
 
     const toUrl = (value: string) => {
         const query = value.trim();
@@ -29,17 +45,31 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
         else window.electronAPI?.navigateTo?.(url);
     };
 
-    const speedDialLinks = [
-        { icon: MessageSquare, label: 'WhatsApp', url: 'https://web.whatsapp.com' },
-        { icon: Github, label: 'GitHub', url: 'https://github.com' },
-        { icon: Video, label: 'YouTube', url: 'https://youtube.com' },
-        { icon: Newspaper, label: 'Reddit', url: 'https://reddit.com' },
-        { icon: Mail, label: 'Proton', url: 'https://mail.proton.me' },
-    ];
+    const speedDialLinks = useMemo(() => [
+        { label: 'WhatsApp', url: 'https://web.whatsapp.com' },
+        { label: 'GitHub', url: 'https://github.com' },
+        { label: 'YouTube', url: 'https://youtube.com' },
+        { label: 'Reddit', url: 'https://reddit.com' },
+        { label: 'Proton', url: 'https://mail.proton.me' },
+    ], []);
 
-    const handleSpeedDialClick = (url: string) => {
+    const handleOpen = (url: string) => {
         if (onNavigate) onNavigate(url);
         else window.electronAPI?.navigateTo?.(url);
+    };
+
+    const addBookmarkFromInput = () => {
+        const url = toUrl(searchQuery);
+        if (!url) return;
+        const hostname = new URL(url).hostname.replace(/^www\./, '');
+        setBookmarks(prev => [
+            { id: `${Date.now()}`, title: hostname, url, createdAt: Date.now() },
+            ...prev.filter(item => item.url !== url)
+        ].slice(0, 18));
+    };
+
+    const removeBookmark = (id: string) => {
+        setBookmarks(prev => prev.filter(item => item.id !== id));
     };
 
     return (
@@ -64,19 +94,45 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
                         onChange={(e) => setSearchQuery(e.target.value)}
                         autoFocus
                     />
+                    <button type="button" className="home-search-action" onClick={addBookmarkFromInput} title="Bookmark this address">
+                        <BookmarkPlus size={18} />
+                    </button>
                 </form>
 
                 <div className="speed-dial" aria-label="Quick links">
                     {speedDialLinks.map((link) => {
-                        const IconComponent = link.icon;
+                        const favicon = getFaviconUrl(link.url);
                         return (
-                            <button key={link.label} onClick={() => handleSpeedDialClick(link.url)} className="speed-dial-item">
-                                <span className="speed-dial-icon"><IconComponent size={22} /></span>
+                            <button key={link.label} onClick={() => handleOpen(link.url)} className="speed-dial-item">
+                                <span className="speed-dial-icon">{favicon ? <img src={favicon} alt="" /> : null}</span>
                                 <span className="speed-dial-label">{link.label}</span>
                             </button>
                         );
                     })}
                 </div>
+
+                <section className="bookmarks-panel" aria-label="Bookmarks">
+                    <header>
+                        <span>Bookmarks</span>
+                        <small>{bookmarks.length ? 'saved locally' : 'type an address, then tap the bookmark icon'}</small>
+                    </header>
+                    <div className="bookmark-grid">
+                        {bookmarks.map(bookmark => {
+                            const favicon = getFaviconUrl(bookmark.url);
+                            return (
+                                <div className="bookmark-card" key={bookmark.id}>
+                                    <button className="bookmark-main" onClick={() => handleOpen(bookmark.url)} title={bookmark.url}>
+                                        {favicon ? <img src={favicon} alt="" /> : <Newspaper size={16} />}
+                                        <span>{bookmark.title}</span>
+                                    </button>
+                                    <button className="bookmark-remove" onClick={() => removeBookmark(bookmark.id)} title="Remove bookmark">
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
             </main>
         </div>
     );
