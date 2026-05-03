@@ -38,15 +38,23 @@ const App: React.FC = () => {
                 e.preventDefault();
                 setActiveTabId('home');
             }
+            if (e.key === 'Escape' && settingsOpen) {
+                e.preventDefault();
+                setSettingsOpen(false);
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    });
+    }, [settingsOpen]);
 
     useEffect(() => {
+        if (settingsOpen) {
+            void window.electronAPI?.hideBrowserView?.();
+            return;
+        }
         if (!activeTab || activeTab.type !== 'browser') void window.electronAPI?.hideBrowserView();
         else void window.electronAPI?.switchTab(activeTab.id);
-    }, [activeTabId, activeTab]);
+    }, [activeTabId, activeTab, settingsOpen]);
 
     useEffect(() => {
         window.electronAPI?.onTabTitleUpdated((tabId, title, url) => {
