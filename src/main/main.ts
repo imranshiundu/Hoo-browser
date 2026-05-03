@@ -21,7 +21,6 @@ const browserViews: Map<string, BrowserView> = new Map();
 let activeTabId: string | null = null;
 let splitTabId: string | null = null;
 let manualBounds: { x: number, y: number, width: number, height: number } | null = null;
-let isSidebarCollapsed = true;
 let openClawLoaded = false;
 
 let persistentData = StorageService.load();
@@ -65,7 +64,6 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
     view.webContents.on('did-start-navigation', (_event, url) => {
         mainWindow?.webContents.send('tab-loading-state', tabId, true, url);
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com')) {
-            console.log(`[DeepSpoof] Hijacking environment for WhatsApp...`);
             view.webContents.setUserAgent(WHATSAPP_UA);
             view.webContents.executeJavaScript(`
                 Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
@@ -105,15 +103,11 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
 
 function restoreTabs() {
     if (!persistentData.tabs) return;
-
     const tabs = [...persistentData.tabs].sort((a: any, b: any) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
     const activeRestoreId = persistentData.activeTabId || tabs.find((tab: any) => tab.type === 'browser')?.id;
 
     tabs.forEach((tab: any) => {
-        if (tab.type !== 'browser') return;
-        const shouldLoadNow = tab.id === activeRestoreId;
-        if (!shouldLoadNow) return;
-
+        if (tab.type !== 'browser' || tab.id !== activeRestoreId) return;
         const view = new BrowserView({
             webPreferences: {
                 nodeIntegration: false,
@@ -123,11 +117,9 @@ function restoreTabs() {
                 backgroundThrottling: true,
             }
         });
-
         browserViews.set(tab.id, view);
         applyPrivacyToSession(view.webContents.session);
         attachViewHandlers(tab.id, view);
-
         if (tab.url) view.webContents.loadURL(tab.url);
     });
 }
@@ -169,7 +161,6 @@ function createWindow() {
     const triggerResize = () => {
         if (activeTabId) updateBrowserViewBounds();
     };
-
     mainWindow.on('resize', triggerResize);
     mainWindow.on('maximize', triggerResize);
     mainWindow.on('unmaximize', triggerResize);
@@ -214,23 +205,10 @@ function applyPrivacyToSession(ses: Electron.Session) {
 
     ses.webRequest.onBeforeRequest(filter, (details, callback) => {
         trackNetworkRequest();
-
         const lowDataDecision = shouldBlockForLowData(details.url, details.resourceType, privacySettings);
-        if (lowDataDecision.block) {
-            console.log(`[Low Data] Blocked ${lowDataDecision.reason}:`, details.url);
-            return callback({ cancel: true });
-        }
-
-        if (privacySettings.adShield && shouldBlockRequest(details.url)) {
-            console.log('[Hoo Shield] Blocked:', details.url);
-            return callback({ cancel: true });
-        }
-
-        if (privacySettings.forceHttps && details.url.startsWith('http://')) {
-            const httpsUrl = details.url.replace('http://', 'https://');
-            return callback({ redirectURL: httpsUrl });
-        }
-
+        if (lowDataDecision.block) return callback({ cancel: true });
+        if (privacySettings.adShield && shouldBlockRequest(details.url)) return callback({ cancel: true });
+        if (privacySettings.forceHttps && details.url.startsWith('http://')) return callback({ redirectURL: details.url.replace('http://', 'https://') });
         callback({ cancel: false });
     });
 
@@ -253,30 +231,24 @@ function setupPrivacyFilters() {
 }
 
 function updateBrowserViewBounds() {
-    if (!mainWindow) return;
-    const bounds = mainWindow.getContentBounds();
-    const sidebarWidth = isSidebarCollapsed ? (68 + 12 + 10) : (250 + 20 + 20);
-    const topBarHeight = 32 + 40;
-    const margin = 10;
-    const padding = 10;
-    const availableWidth = Math.max(0, bounds.width - sidebarWidth - (margin * 2));
-    const availableHeight = Math.max(0, bounds.height - topBarHeight - margin);
-
-    if (manualBounds) {
-        const view = browserViews.get(activeTabId || '');
-        if (view) view.setBounds(manualBounds);
-        return;
-    }
+    if (!mainWindow || !activeTabId) return;
+    const content = mainWindow.getContentBounds();
+    const bounds = manualBounds || {
+        x: 0,
+        y: 118,
+        width: content.width,
+        height: Math.max(100, content.height - 118)
+    };
 
     if (activeTabId && splitTabId) {
         const view1 = browserViews.get(activeTabId);
         const view2 = browserViews.get(splitTabId);
-        const splitWidth = (availableWidth - padding) / 2;
-        if (view1) view1.setBounds({ x: sidebarWidth + margin, y: topBarHeight, width: Math.floor(splitWidth), height: availableHeight });
-        if (view2) view2.setBounds({ x: sidebarWidth + margin + Math.floor(splitWidth) + padding, y: topBarHeight, width: Math.floor(splitWidth), height: availableHeight });
-    } else if (activeTabId) {
+        const splitWidth = Math.floor((bounds.width - 8) / 2);
+        if (view1) view1.setBounds({ x: bounds.x, y: bounds.y, width: splitWidth, height: bounds.height });
+        if (view2) view2.setBounds({ x: bounds.x + splitWidth + 8, y: bounds.y, width: splitWidth, height: bounds.height });
+    } else {
         const view = browserViews.get(activeTabId);
-        if (view) view.setBounds({ x: sidebarWidth + margin, y: topBarHeight, width: availableWidth, height: availableHeight });
+        if (view) view.setBounds(bounds);
     }
 }
 
@@ -291,17 +263,11 @@ function showBrowserView(tabId: string, isSplit = false) {
     browserViews.forEach(view => mainWindow!.removeBrowserView(view));
     if (activeTabId) {
         const view = browserViews.get(activeTabId);
-        if (view) {
-            mainWindow.addBrowserView(view);
-            mainWindow.setTopBrowserView(view);
-        }
+        if (view) mainWindow.addBrowserView(view);
     }
     if (splitTabId) {
         const view = browserViews.get(splitTabId);
-        if (view) {
-            mainWindow.addBrowserView(view);
-            mainWindow.setTopBrowserView(view);
-        }
+        if (view) mainWindow.addBrowserView(view);
     }
     updateBrowserViewBounds();
 }
@@ -327,10 +293,7 @@ ipcMain.handle('start-openclaw', async () => {
     return new Promise((resolve) => {
         exec(cmd, (err, stdout, stderr) => {
             if (err) resolve({ ok: false, error: stderr || err.message });
-            else {
-                console.log('[OpenClaw] Started:', stdout);
-                resolve({ ok: true });
-            }
+            else resolve({ ok: true });
         });
     });
 });
@@ -402,7 +365,6 @@ ipcMain.handle('get-system-metrics', async () => getPerformanceSnapshot({
 }));
 
 ipcMain.handle('nuclear-wipe', async () => {
-    console.log('NUCLEAR WIPE INITIATED');
     await session.defaultSession.clearStorageData();
     StorageService.wipeAll();
     app.relaunch();
@@ -465,13 +427,10 @@ ipcMain.handle('close-tab', async (_event, tabId: string) => {
     if (activeTabId === tabId && browserViews.size > 0) showBrowserView(Array.from(browserViews.keys())[0]);
 });
 
-ipcMain.handle('toggle-sidebar', async (_event, collapsed: boolean) => {
-    isSidebarCollapsed = collapsed;
-    if (activeTabId) updateBrowserViewBounds();
-});
+ipcMain.handle('toggle-sidebar', async () => updateBrowserViewBounds());
 
 ipcMain.handle('navigate-to', async (_event, url: string) => {
-    if (!mainWindow) return;
+    if (!mainWindow) return null;
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) finalUrl = 'https://' + url;
     if (await isMaliciousUrl(finalUrl)) return null;
