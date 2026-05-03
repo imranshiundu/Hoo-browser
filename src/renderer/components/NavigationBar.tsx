@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, Shield, Lock, Globe, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, Shield, Lock, Globe } from 'lucide-react';
 
 interface NavigationBarProps {
     tabId: string;
@@ -12,7 +12,6 @@ interface NavigationBarProps {
 }
 
 const NavigationBar: React.FC<NavigationBarProps> = ({
-    tabId,
     url,
     onNavigate,
     onBack,
@@ -28,43 +27,31 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         let target = inputValue.trim();
-        if (target) {
-            // Search shortcuts
-            if (target.startsWith('!w ')) {
-                target = `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(target.substring(3))}`;
-            } else if (target.startsWith('!y ')) {
-                target = `https://www.youtube.com/results?search_query=${encodeURIComponent(target.substring(3))}`;
-            } else if (target.startsWith('!g ')) {
-                target = `https://www.google.com/search?q=${encodeURIComponent(target.substring(3))}`;
-            } else if (target.startsWith('!d ')) {
-                target = `https://duckduckgo.com/?q=${encodeURIComponent(target.substring(3))}`;
-            } else {
-                // URL detection
-                const isUrl = target.includes('.') && !target.includes(' ') && (target.startsWith('http') || target.split('/')[0].includes('.'));
-                if (!isUrl) {
-                    // Fallback to Google Search
-                    target = `https://www.google.com/search?q=${encodeURIComponent(target)}`;
-                } else if (!target.startsWith('http')) {
-                    target = `https://${target}`;
-                }
-            }
+        if (!target) return;
 
-            onNavigate(target);
+        if (target.startsWith('!w ')) {
+            target = `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(target.substring(3))}`;
+        } else if (target.startsWith('!y ')) {
+            target = `https://www.youtube.com/results?search_query=${encodeURIComponent(target.substring(3))}`;
+        } else if (target.startsWith('!g ')) {
+            target = `https://www.google.com/search?q=${encodeURIComponent(target.substring(3))}`;
+        } else if (target.startsWith('!d ')) {
+            target = `https://duckduckgo.com/?q=${encodeURIComponent(target.substring(3))}`;
+        } else {
+            const isUrl = target.includes('.') && !target.includes(' ') && (target.startsWith('http') || target.split('/')[0].includes('.'));
+            if (!isUrl) target = `https://duckduckgo.com/?q=${encodeURIComponent(target)}`;
+            else if (!target.startsWith('http')) target = `https://${target}`;
         }
+
+        onNavigate(target);
     };
 
     return (
         <div className="navigation-bar">
             <div className="nav-controls">
-                <button className="nav-btn" onClick={onBack} title="Back">
-                    <ArrowLeft size={16} />
-                </button>
-                <button className="nav-btn" onClick={onForward} title="Forward">
-                    <ArrowRight size={16} />
-                </button>
-                <button className="nav-btn" onClick={onReload} title="Reload">
-                    <RotateCw size={16} />
-                </button>
+                <button className="nav-btn" onClick={onBack} title="Back"><ArrowLeft size={16} /></button>
+                <button className="nav-btn" onClick={onForward} title="Forward"><ArrowRight size={16} /></button>
+                <button className="nav-btn" onClick={onReload} title="Reload"><RotateCw size={16} /></button>
             </div>
 
             <div className="address-bar-wrapper">
@@ -78,10 +65,10 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onFocus={(e) => e.target.select()}
-                        placeholder="Search or enter URL"
+                        placeholder="Search with DuckDuckGo or enter address"
                     />
                 </form>
-                <div className="zen-shield-indicator" title="Shields Active">
+                <div className="hoo-shield-indicator" title="Hoo Shields Active">
                     <Shield size={14} />
                     <span className="shield-count">12</span>
                 </div>
