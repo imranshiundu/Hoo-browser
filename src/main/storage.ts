@@ -92,6 +92,36 @@ function normalizeStorageData(data: Partial<StorageData>): StorageData {
     };
 }
 
+function decodeStorageBuffer(content: Buffer): string {
+    const plainText = content.toString('utf8');
+    try {
+        JSON.parse(plainText);
+        return plainText;
+    } catch {
+        // Existing Hoo installs may still have safeStorage-encrypted bytes.
+    }
+
+    if (safeStorage.isEncryptionAvailable()) {
+        try {
+            return safeStorage.decryptString(content);
+        } catch (error) {
+            console.warn('[Storage] Encrypted profile read failed, will try legacy plain text parse next:', error);
+        }
+    }
+
+    return plainText;
+}
+
+function writePlainJsonAtomic(data: StorageData): void {
+    const dir = path.dirname(STORAGE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const tmpPath = `${STORAGE_FILE}.tmp`;
+    const jsonString = JSON.stringify(data, null, 2);
+    fs.writeFileSync(tmpPath, jsonString, 'utf8');
+    fs.renameSync(tmpPath, STORAGE_FILE);
+}
+
 export class StorageService {
     static encryptionAvailable(): boolean {
         return safeStorage.isEncryptionAvailable();
@@ -101,19 +131,7 @@ export class StorageService {
         try {
             if (fs.existsSync(STORAGE_FILE)) {
                 const content = fs.readFileSync(STORAGE_FILE);
-
-                let jsonString: string;
-                if (safeStorage.isEncryptionAvailable()) {
-                    try {
-                        jsonString = safeStorage.decryptString(content);
-                    } catch (e) {
-                        console.warn('[Storage] Decryption failed, attempting plain text read...');
-                        jsonString = content.toString('utf8');
-                    }
-                } else {
-                    jsonString = content.toString('utf8');
-                }
-
+                const jsonString = decodeStorageBuffer(content);
                 const data = JSON.parse(jsonString);
                 return normalizeStorageData(data);
             }
@@ -121,15 +139,20 @@ export class StorageService {
             console.error('[Storage] Error loading data:', error);
             try {
                 if (fs.existsSync(STORAGE_FILE)) {
-                    const brokenPath = `${STORAGE_FILE}.broken-${Date.now()}`;
-                    fs.renameSync(STORAGE_FILE, brokenPath);
-                    console.warn(`[Storage] Broken profile data moved to ${brokenPath}. Starting clean instead of rendering stale tabs.`);
+                    const raw = fs.readFileSync(STORAGE_FILE).toString('utf8').trim();
+                    if (raw && !raw.startsWith('{') && !raw.startsWith('[')) {
+                        console.warn('[Storage] Profile file was not readable JSON. Keeping it in place; starting with defaults for this session.');
+                    } else {
+                        const brokenPath = `${STORAGE_FILE}.broken-${Date.now()}`;
+                        fs.renameSync(STORAGE_FILE, brokenPath);
+                        console.warn(`[Storage] Corrupt JSON profile data moved to ${brokenPath}.`);
+                    }
                 }
             } catch (moveError) {
-                console.error('[Storage] Could not quarantine broken data:', moveError);
+                console.error('[Storage] Could not inspect/quarantine broken data:', moveError);
             }
         }
-        return defaultData;
+        return normalizeStorageData(defaultData);
     }
 
     static save(data: Partial<StorageData>) {
@@ -144,14 +167,10 @@ export class StorageService {
                 settings: mergedSettings,
                 lastUpdated: Date.now()
             });
-            const jsonString = JSON.stringify(newData, null, 2);
 
-            if (safeStorage.isEncryptionAvailable()) {
-                const encrypted = safeStorage.encryptString(jsonString);
-                fs.writeFileSync(STORAGE_FILE, encrypted);
-            } else {
-                fs.writeFileSync(STORAGE_FILE, jsonString);
-            }
+            // Save normal JSON for now. Hoo can still read old encrypted profiles,
+            // but plaintext avoids safeStorage key/session drift making settings look unsaved.
+            writePlainJsonAtomic(newData);
         } catch (error) {
             console.error('[Storage] Error saving data:', error);
         }
