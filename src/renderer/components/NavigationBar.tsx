@@ -1,30 +1,41 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield, Search, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield, Search, MoreHorizontal, Columns2, PanelRightClose } from 'lucide-react';
+import { Tab } from '../types';
 
 interface NavigationBarProps {
     tabId: string;
     url: string;
+    tabs?: Tab[];
+    splitTabId?: string | null;
     onNavigate: (url: string) => void;
     onBack: () => void;
     onForward: () => void;
     onReload: () => void;
+    onSplitWithTab?: (tabId: string) => void;
+    onClearSplit?: () => void;
     onOpenSettings?: () => void;
 }
 
 const BOOKMARK_KEY = 'hoo:bookmarks';
 
 const NavigationBar: React.FC<NavigationBarProps> = ({
+    tabId,
     url,
+    tabs = [],
+    splitTabId,
     onNavigate,
     onBack,
     onForward,
     onReload,
+    onSplitWithTab,
+    onClearSplit,
     onOpenSettings
 }) => {
     const [inputValue, setInputValue] = useState(url);
     const [bookmarksOpen, setBookmarksOpen] = useState(false);
     const [toolsOpen, setToolsOpen] = useState(false);
+    const [splitOpen, setSplitOpen] = useState(false);
     const [bookmarks, setBookmarks] = useState<Array<{ id: string; title: string; url: string }>>([]);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +62,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             const target = event.target as HTMLElement | null;
             if (!target?.closest('.nav-menu-wrap')) setBookmarksOpen(false);
             if (!target?.closest('.tools-menu-wrap')) setToolsOpen(false);
+            if (!target?.closest('.split-menu-wrap')) setSplitOpen(false);
         };
         document.addEventListener('mousedown', closePopovers);
         return () => document.removeEventListener('mousedown', closePopovers);
@@ -105,6 +117,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         }
     };
 
+    const splitCandidates = tabs.filter(tab => tab.id !== tabId && tab.type === 'browser');
     const isSecure = url.startsWith('https://');
     const isExternal = /^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(url || inputValue);
 
@@ -141,9 +154,36 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             </form>
 
             <div className="nav-cluster nav-actions-cluster" aria-label="Page actions">
+                <div className="split-menu-wrap">
+                    <button
+                        className={`nav-btn ${splitTabId ? 'split-active' : ''}`}
+                        onClick={() => {
+                            if (splitTabId) onClearSplit?.();
+                            else setSplitOpen(v => !v);
+                            setBookmarksOpen(false);
+                            setToolsOpen(false);
+                        }}
+                        title={splitTabId ? 'Exit split screen' : 'Split screen'}
+                    >
+                        {splitTabId ? <PanelRightClose size={16} /> : <Columns2 size={16} />}
+                    </button>
+                    {splitOpen && !splitTabId && (
+                        <div className="split-popover">
+                            <strong>Split screen</strong>
+                            {splitCandidates.length === 0 ? (
+                                <button onClick={() => { setSplitOpen(false); onNavigate('https://duckduckgo.com/'); }}>Open a second tab first</button>
+                            ) : splitCandidates.map(tab => (
+                                <button key={tab.id} onClick={() => { setSplitOpen(false); onSplitWithTab?.(tab.id); }}>
+                                    <span>{tab.title || 'Untitled tab'}</span>
+                                    <small>{tab.url || 'New tab'}</small>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <button className="nav-btn" onClick={bookmarkCurrent} title="Bookmark page"><Star size={16} /></button>
                 <div className="nav-menu-wrap">
-                    <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); setToolsOpen(false); }} title="Bookmarks"><BookOpen size={16} /></button>
+                    <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); setToolsOpen(false); setSplitOpen(false); }} title="Bookmarks"><BookOpen size={16} /></button>
                     {bookmarksOpen && (
                         <div className="bookmarks-popover">
                             <strong>Bookmarks</strong>
@@ -163,7 +203,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                 <button className="nav-btn optional-tool" onClick={() => onNavigate('https://duck.ai/')} title="Duck.ai"><Sparkles size={16} /></button>
                 <button className="nav-btn optional-tool" title="Downloads"><Download size={16} /></button>
                 <div className="tools-menu-wrap">
-                    <button className="nav-btn" onClick={() => { setToolsOpen(v => !v); setBookmarksOpen(false); }} title="More tools"><MoreHorizontal size={18} /></button>
+                    <button className="nav-btn" onClick={() => { setToolsOpen(v => !v); setBookmarksOpen(false); setSplitOpen(false); }} title="More tools"><MoreHorizontal size={18} /></button>
                     {toolsOpen && (
                         <div className="tools-popover">
                             <button onClick={() => { setToolsOpen(false); onNavigate('https://duck.ai/'); }}><Sparkles size={15} /> Duck.ai</button>
