@@ -1,16 +1,76 @@
-# Zen Browser
+<p align="center">
+  <img src="./docs/branding/hoo-branding.svg" alt="Hoo Browser" width="920" />
+</p>
 
-Zen Browser is an experimental desktop browser shell built with Electron. The goal is to shape it into a Linux-first browser for controlled web apps, DuckDuckGo-first search, practical privacy controls, encrypted local data where possible, and local-first AI assistance.
+<p align="center">
+  <strong>OWL-GUIDED. PRIVACY-FIRST. WEB FREEDOM.</strong>
+</p>
 
-This is not a finished Chrome, Brave, Firefox, or Arc replacement yet. It is a prototype that needs hardening before anyone should trust it as a daily driver.
+<p align="center">
+  Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy,
+  isolated web apps, and a calm, watchful browsing experience for Linux and beyond.
+</p>
+
+---
+
+# Hoo Browser
+
+Hoo Browser is an experimental desktop browser shell built with Electron. The goal is to shape it into a real installable Linux-first browser for DuckDuckGo-first search, isolated web apps, practical privacy controls, encryption-aware local data, and optional local-first AI assistance.
+
+Hoo is not just a renamed Zen. The product direction is now owl-guided: the browser should feel watchful, calm, useful, protective, and honest about what it can and cannot do.
+
+This is still not a finished Chrome, Brave, Firefox, or Arc replacement. It can render web pages through Electron's Chromium engine, but the project still needs stronger downloads, visible permission prompts, crash recovery, tests, maintained privacy filters, and packaging verification before it should be trusted as a daily driver.
+
+## Brand system
+
+### Name
+
+**Hoo Browser**
+
+### Tagline
+
+**OWL-GUIDED. PRIVACY-FIRST. WEB FREEDOM.**
+
+### Colors
+
+- **Hoo Orange** — `#FF6A00`
+- **Leaf Green** — `#3DBB78`
+- **Feather Cream** — `#F2F2EF`
+- **Forest Black** — `#0E1111`
+- **Slate Charcoal** — `#171B1D`
+
+### Mascot direction
+
+Hoo is the watchful owl guide. The mascot is not decoration. It should appear in the app icon, new-tab identity, privacy moments, settings, empty states, and protection prompts. The tone should be friendly and useful, not childish.
+
+Brand assets live in:
+
+```text
+src/renderer/assets/branding/
+docs/branding/
+```
 
 ## Current status
 
-Version: `v0.1 Foundation`
+Version: `v0.2 Hoo Foundation`
 
-The current codebase can render web pages through Electron's Chromium engine and includes early versions of tabs, app profiles, privacy toggles, bookmarks, RSS, MEGA sync, and an OpenClaw AI panel.
+The current codebase includes early versions of:
 
-The important work now is to make the project honest, stable, testable, and easier to improve.
+- Chromium rendering through Electron `BrowserView`
+- tabs with persisted basic state
+- navigation controls
+- DuckDuckGo-first home search
+- isolated web-app profiles
+- WhatsApp Web profile experiment for Linux
+- privacy toggles
+- bookmarks
+- RSS
+- MEGA sync experiment
+- OpenClaw AI panel
+- Linux install/update scripts
+- Hoo branded home UI and README identity
+
+The important work now is to make the project stable, testable, installable, and honest.
 
 ## What makes a real browser real?
 
@@ -28,44 +88,19 @@ A real browser is not just an app that opens a website. A real browser needs:
 - update/install packaging
 - clear privacy behavior that matches the code
 
-Zen already has the beginning of the rendering, navigation, tabs, app profiles, bookmarks, and privacy layers. It still needs stronger downloads, permissions UI, crash recovery, tests, packaging, and privacy hardening before it can be called a daily-driver browser.
+Hoo already has the beginning of rendering, navigation, tabs, app profiles, bookmarks, and privacy layers. It still needs stronger downloads, permissions UI, crash recovery, tests, packaging, and privacy hardening before it can be called daily-driver ready.
 
 See [`docs/real-browser-checklist.md`](docs/real-browser-checklist.md).
 
 ## Product identity
 
-Zen should become useful first as:
+Hoo should become useful first as:
 
-> A Linux-first browser for DuckDuckGo search, isolated web apps, practical privacy controls, encrypted local profile data where available, and optional local AI help.
+> A DuckDuckGo-first desktop browser for isolated web apps, practical privacy controls, encryption-aware local profile data, and a calm owl-guided browsing experience.
 
 DuckDuckGo is the default search identity. Startpage and Qwant are privacy alternatives. Google can exist as a user-selected fallback, but it should not define the browser.
 
-WhatsApp support matters. It should remain one of the strongest web-app profiles, especially for Linux users, but the browser should not become only a WhatsApp wrapper.
-
-## What this browser is trying to become
-
-A focused browser for people who want:
-
-- DuckDuckGo-first desktop browsing
-- Linux-first web app profiles
-- WhatsApp, GitHub, ChatGPT, Proton Mail, and similar apps in isolated sessions
-- clear privacy controls instead of hidden settings
-- encrypted local profile storage where the OS supports it
-- optional encrypted backup/sync direction
-- optional local-first AI assistance
-- no browser-vendor account requirement for basic usage
-- practical tools for builders, researchers, and power users
-
-## What it is not yet
-
-Zen Browser is not yet:
-
-- a full privacy browser
-- an anonymity tool
-- a hardened security browser
-- a complete replacement for mainstream browsers
-- a production-ready password/session manager
-- a proven WhatsApp calling solution across all accounts and future WhatsApp updates
+WhatsApp support matters. It should remain one of the strongest web-app profiles, especially for Linux users, but Hoo should not become only a WhatsApp wrapper.
 
 ## Core features in the prototype
 
@@ -90,10 +125,10 @@ Zen Browser is not yet:
 - HTTPS upgrade attempt for HTTP URLs
 - optional user-agent spoofing
 - configurable history retention
-- local storage through Electron `safeStorage` when available
+- local storage through Electron `safeStorage` where available
 - encryption status and encrypted backup/sync still need stronger implementation
 
-These controls are early. They should be treated as practical experiments, not strong privacy guarantees.
+These controls are early. Treat them as practical experiments, not strong privacy guarantees.
 
 See [`docs/encryption-plan.md`](docs/encryption-plan.md).
 
@@ -103,23 +138,46 @@ See [`docs/encryption-plan.md`](docs/encryption-plan.md).
 - local gateway status check
 - current page title and URL can be passed as context
 
-The AI layer should remain explicit and user-controlled. The browser should not silently scrape or send page content.
+The AI layer must remain explicit and user-controlled. Hoo should not silently scrape or send page content.
 
-### Other tools
-
-- bookmarks
-- RSS reader
-- dashboard
-- MEGA profile sync experiment
-
-## Setup
+## Install on Linux
 
 Requirements:
 
 - Node.js 18 or newer
 - npm 9 or newer
-- Electron-supported desktop OS
-- Linux recommended for the current direction
+- Git
+- Electron-supported Linux desktop
+
+Install directly from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/imranshiundu/Hoo-browser/main/scripts/install-hoo.sh | bash
+```
+
+The installer:
+
+- clones Hoo into `~/.local/share/hoo-browser`
+- installs dependencies
+- builds the Electron app
+- creates a `hoo-browser` launcher in `~/.local/bin`
+- creates a desktop launcher so Hoo appears in the app menu
+- installs a user-level systemd timer that checks for updates every 7 days
+
+Start it from your app launcher or run:
+
+```bash
+hoo-browser
+```
+
+## Development setup
+
+Clone the repository:
+
+```bash
+git clone https://github.com/imranshiundu/Hoo-browser.git
+cd Hoo-browser
+```
 
 Install dependencies:
 
@@ -163,15 +221,28 @@ Only use the unsafe no-sandbox command when debugging a local environment that r
 npm run start:unsafe-no-sandbox
 ```
 
+## Packaging
+
+Early packaging scripts are available:
+
+```bash
+npm run dist
+npm run dist:appimage
+npm run dist:deb
+```
+
+Packaging still needs clean-machine verification before public release builds should be advertised.
+
 ## Project structure
 
 ```text
 src/
   main/        Electron main process, BrowserView management, storage, sync, privacy filters
   preload/     safe bridge exposed to the renderer
-  renderer/    React interface, views, panels, navigation, settings
+  renderer/    React interface, views, panels, navigation, settings, branding assets
 
 docs/
+  branding/                  README and brand assets
   encryption-plan.md
   real-browser-checklist.md
   rebuild-plan.md
@@ -184,7 +255,7 @@ Do not commit personal machine paths such as `/home/imran/...` or private local 
 Use generic paths only:
 
 ```text
-~/.config/zen-browser
+~/.config/hoo-browser
 /path/to/openclaw/docker-compose.yml
 ```
 
@@ -192,30 +263,31 @@ Local developer paths can exist in a private `.env` or ignored local config file
 
 ## Known problems
 
-These are not small issues. They are the reason the browser needs a rebuild path.
+These are not small issues. They are why Hoo still needs a rebuild path.
 
 1. The ad/tracker blocker uses a small hard-coded list, not maintained filter lists.
 2. Random user-agent rotation can make fingerprinting worse if used incorrectly.
-3. Some README claims were stronger than the implementation.
-4. The project has no automated tests yet.
-5. RSS currently depends on renderer-side fetching patterns that should move to the main process.
-6. Cloud sync needs stronger conflict handling and clearer data boundaries.
-7. IPC actions need tighter validation as the browser grows.
-8. Packaging is not ready for normal users.
-9. The app needs a clean release mode that does not behave like a development build.
-10. Hard-coded local developer assumptions must be moved into user-configurable settings.
+3. Download manager UI is not complete yet.
+4. Permission prompts for camera, microphone, notifications, location, and clipboard need a visible Hoo-controlled UX.
+5. Crash recovery needs implementation.
+6. The project has no automated tests yet.
+7. RSS currently depends on renderer-side fetching patterns that should move to the main process.
+8. Cloud sync needs stronger conflict handling and clearer data boundaries.
+9. IPC actions need tighter validation as the browser grows.
+10. AppImage/deb builds need clean-machine verification.
 
 ## Rebuild path
 
 Use simple version names:
 
 - `v0.1 Foundation` — honest docs, build scripts, verification, project contract
-- `v0.2 Stable Tabs` — reliable tab restore, navigation state, crash handling
-- `v0.3 Web Apps` — isolated app profiles, permissions, reset controls
-- `v0.4 Privacy Controls` — maintained filters, allowlists, visible blocked counts, stable fingerprint profile
-- `v0.5 Local Assistant` — streaming, explicit context, provider settings, local/cloud warnings
-- `v0.6 Sync and Encryption` — safe sync scope, conflict handling, encrypted backup/import/export
-- `v0.7 Packaging` — AppImage, deb, icons, desktop entry
+- `v0.2 Hoo Foundation` — Hoo identity, installer path, branded home UI, packaging metadata
+- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling
+- `v0.4 Web Apps` — isolated app profiles, permissions, reset controls
+- `v0.5 Privacy Controls` — maintained filters, allowlists, visible blocked counts, stable fingerprint profile
+- `v0.6 Local Assistant` — streaming, explicit context, provider settings, local/cloud warnings
+- `v0.7 Sync and Encryption` — safe sync scope, conflict handling, encrypted backup/import/export
+- `v0.8 Packaging` — verified AppImage, deb, icons, desktop entry
 - `v1.0 Daily Driver` — only after stability, packaging, tests, and privacy docs match behavior
 
 Read the detailed plan in [`docs/rebuild-plan.md`](docs/rebuild-plan.md).
