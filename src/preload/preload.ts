@@ -18,10 +18,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // Quick Navigation
     navigateTo: (url: string) => ipcRenderer.invoke('navigate-to', url),
 
-    // Privacy Settings
+    // Privacy and performance
     updatePrivacySettings: (settings: any) => ipcRenderer.invoke('update-privacy-settings', settings),
     getInitialData: () => ipcRenderer.invoke('get-initial-data'),
     getSystemMetrics: () => ipcRenderer.invoke('get-system-metrics'),
+    getPerformanceSnapshot: () => ipcRenderer.invoke('get-performance-snapshot'),
     nuclearWipe: () => ipcRenderer.invoke('nuclear-wipe'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
 
