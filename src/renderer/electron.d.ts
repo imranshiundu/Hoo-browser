@@ -81,6 +81,7 @@ declare global {
         reloadApp: () => Promise<void>;
         onTabTitleUpdated: (callback: (tabId: string, title: string, url?: string) => void) => void;
         onSwitchToBrowser: (callback: (tabId: string) => void) => void;
+        onSwitchToHome: (callback: () => void) => void;
         googleLogin: () => Promise<any>;
         googleLogout: () => Promise<boolean>;
         megaLogin: (email: string, pass: string) => Promise<boolean>;
