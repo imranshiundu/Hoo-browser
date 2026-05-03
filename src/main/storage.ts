@@ -25,6 +25,20 @@ export interface CrashedTabRecord {
     crashedAt: number;
 }
 
+export type BrowserTabLifecycle = 'placeholder' | 'loaded' | 'sleeping' | 'crashed';
+
+export interface BrowserTabRecord {
+    id: string;
+    type: 'browser';
+    title: string;
+    url: string;
+    isApp?: boolean;
+    partition?: string;
+    lifecycle?: BrowserTabLifecycle;
+    lastActiveAt?: number;
+    restoredLazy?: boolean;
+}
+
 export interface StorageData {
     tabs: any[];
     history: any[];
@@ -47,6 +61,7 @@ const defaultData: StorageData = {
         { id: 'apps', type: 'apps', title: 'Apps' },
         { id: 'rss', type: 'rss', title: 'RSS' },
         { id: 'privacy', type: 'privacy', title: 'Privacy' },
+        { id: 'performance', type: 'performance', title: 'Performance' },
         { id: 'bookmarks', type: 'bookmarks', title: 'Bookmarks' },
         { id: 'extensions', type: 'extensions', title: 'Plugins' }
     ],
@@ -55,7 +70,10 @@ const defaultData: StorageData = {
     crashedTabs: [],
     settings: {
         dataRetention: 'forever',
-        deepSpoof: true
+        deepSpoof: true,
+        lazySessionRestore: true,
+        maxLiveBackgroundTabs: 4,
+        sleepIdleTabsAfterMinutes: 15
     },
     activeTabId: 'home',
     lastUpdated: Date.now()
@@ -127,6 +145,16 @@ export class StorageService {
         const data = this.load();
         data.crashedTabs.unshift(record);
         this.save({ crashedTabs: data.crashedTabs.slice(0, 50) });
+    }
+
+    static markTabLifecycle(tabId: string, lifecycle: BrowserTabLifecycle) {
+        const data = this.load();
+        const tab = data.tabs.find(item => item.id === tabId && item.type === 'browser');
+        if (tab) {
+            tab.lifecycle = lifecycle;
+            if (lifecycle === 'loaded') tab.lastActiveAt = Date.now();
+            this.save({ tabs: data.tabs });
+        }
     }
 
     static wipeAll() {
