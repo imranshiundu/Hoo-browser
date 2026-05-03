@@ -2,9 +2,34 @@ import { app, safeStorage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
+export interface DownloadRecord {
+    id: string;
+    url: string;
+    filename: string;
+    savePath: string;
+    state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+    receivedBytes: number;
+    totalBytes: number;
+    startedAt: number;
+    endedAt?: number;
+    danger?: string;
+}
+
+export interface CrashedTabRecord {
+    id: string;
+    tabId: string;
+    url: string;
+    title: string;
+    reason: string;
+    exitCode?: number;
+    crashedAt: number;
+}
+
 export interface StorageData {
     tabs: any[];
     history: any[];
+    downloads: DownloadRecord[];
+    crashedTabs: CrashedTabRecord[];
     settings: {
         dataRetention: '1d' | '7d' | '30d' | 'forever';
         [key: string]: any;
@@ -26,6 +51,8 @@ const defaultData: StorageData = {
         { id: 'extensions', type: 'extensions', title: 'Plugins' }
     ],
     history: [],
+    downloads: [],
+    crashedTabs: [],
     settings: {
         dataRetention: 'forever',
         deepSpoof: true
@@ -35,17 +62,20 @@ const defaultData: StorageData = {
 };
 
 export class StorageService {
+    static encryptionAvailable(): boolean {
+        return safeStorage.isEncryptionAvailable();
+    }
+
     static load(): StorageData {
         try {
             if (fs.existsSync(STORAGE_FILE)) {
                 const content = fs.readFileSync(STORAGE_FILE);
-                
+
                 let jsonString: string;
                 if (safeStorage.isEncryptionAvailable()) {
                     try {
                         jsonString = safeStorage.decryptString(content);
                     } catch (e) {
-                        // Fallback to plain text if decryption fails (likely transition from unencrypted)
                         console.warn('[Storage] Decryption failed, attempting plain text read...');
                         jsonString = content.toString('utf8');
                     }
@@ -54,7 +84,13 @@ export class StorageService {
                 }
 
                 const data = JSON.parse(jsonString);
-                return { ...defaultData, ...data };
+                return {
+                    ...defaultData,
+                    ...data,
+                    settings: { ...defaultData.settings, ...(data.settings || {}) },
+                    downloads: data.downloads || [],
+                    crashedTabs: data.crashedTabs || []
+                };
             }
         } catch (error) {
             console.error('[Storage] Error loading data:', error);
@@ -79,11 +115,25 @@ export class StorageService {
         }
     }
 
+    static upsertDownload(record: DownloadRecord) {
+        const data = this.load();
+        const index = data.downloads.findIndex(item => item.id === record.id);
+        if (index >= 0) data.downloads[index] = record;
+        else data.downloads.unshift(record);
+        this.save({ downloads: data.downloads.slice(0, 200) });
+    }
+
+    static recordCrashedTab(record: CrashedTabRecord) {
+        const data = this.load();
+        data.crashedTabs.unshift(record);
+        this.save({ crashedTabs: data.crashedTabs.slice(0, 50) });
+    }
+
     static wipeAll() {
         try {
             if (fs.existsSync(STORAGE_FILE)) {
                 fs.unlinkSync(STORAGE_FILE);
-                console.log('☢️ [Storage] user-data.json purged.');
+                console.log('[Storage] user-data.json purged.');
             }
         } catch (error) {
             console.error('[Storage] Error wiping data:', error);
