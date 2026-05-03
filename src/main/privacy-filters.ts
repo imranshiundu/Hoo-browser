@@ -1,26 +1,17 @@
-// Ad and Tracker Blocking Filter Lists
-// Simplified subset of EasyList rules for demonstration
+// Ad and tracker blocking rules kept intentionally light.
+// Hoo should feel fast first; aggressive cosmetic/ad blocking can make large apps
+// like YouTube, WhatsApp and DuckDuckGo sit on skeleton screens for too long.
 
 export const adBlockRules = [
-    // Common ad servers
     'doubleclick.net',
     'googlesyndication.com',
     'googleadservices.com',
-    'google-analytics.com',
-    'googletagmanager.com',
-    'facebook.net',
     'facebook.com/tr',
-    'connect.facebook.net',
-
-    // Tracking domains
     'scorecardresearch.com',
     'quantserve.com',
-    'chartbeat.com',
     'hotjar.com',
     'crazyegg.com',
     'mouseflow.com',
-
-    // Ad networks
     'adnxs.com',
     'adsrvr.org',
     'advertising.com',
@@ -34,15 +25,6 @@ export const adBlockRules = [
     'doubleverify.com',
     'iasdirect.com',
     'moatads.com',
-
-    // YouTube / Google Specific Ads
-    'pagead2.googlesyndication.com',
-    'ad.doubleclick.net',
-    'googleadservices.com',
-    'stats.g.doubleclick.net',
-    'adservice.google.com',
-
-    // Analytics
     'mixpanel.com',
     'segment.com',
     'amplitude.com',
@@ -57,53 +39,45 @@ export const trackerBlockRules = [
     '/pixel.',
     '/beacon.',
     '/collect?',
-    '/log?',
     '/track?',
     '/event?',
-    '/ads?',
-    '/ads/',
-    '/adv/',
-    '/advert/',
-    'googlesyndication.com/pagead/',
-    'youtube.com/api/stats/ads',
-    'youtube.com/ptracking',
-    'youtube.com/pagead/',
-    'safeframe.googlesyndication.com',
-    'googlevideo.com/videoplayback?.*adformat=',
-    'googlevideo.com/videoplayback?.*ptchn=',
-    'youtube.com/get_midroll_info',
-    'youtube.com/get_video_info?.*adformat=',
 ];
 
 const adBlockSet = new Set(adBlockRules);
+const HEAVY_APP_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com'];
+
+function isHeavyAppUrl(url: string): boolean {
+    try {
+        const hostname = new URL(url).hostname.replace(/^www\./, '');
+        return HEAVY_APP_HOSTS.some(host => hostname === host.replace(/^www\./, '') || hostname.endsWith(`.${host.replace(/^www\./, '')}`));
+    } catch {
+        return false;
+    }
+}
 
 export function shouldBlockRequest(url: string): boolean {
+    if (isHeavyAppUrl(url)) return false;
+
     const urlLower = url.toLowerCase();
 
     try {
         const parsedUrl = new URL(urlLower);
         const host = parsedUrl.hostname;
 
-        // Check exact host and parent domains
         let currentHost = host;
         while (currentHost.includes('.')) {
             if (adBlockSet.has(currentHost)) return true;
             currentHost = currentHost.substring(currentHost.indexOf('.') + 1);
         }
         if (adBlockSet.has(currentHost)) return true;
-
     } catch (e) {
-        // Fallback to substring matching if URL parsing fails
         for (const domain of adBlockRules) {
             if (urlLower.includes(domain)) return true;
         }
     }
 
-    // Check pattern blocking
     for (const pattern of trackerBlockRules) {
-        if (urlLower.includes(pattern)) {
-            return true;
-        }
+        if (urlLower.includes(pattern)) return true;
     }
 
     return false;
@@ -124,23 +98,18 @@ export async function isMaliciousUrl(url: string): Promise<boolean> {
         return maliciousPatterns.some(pattern => host.includes(pattern));
     } catch (e) {
         console.error('[Security] Error checking URL safety:', e);
-        return false; // Default to safe if check fails to prevent black screens
+        return false;
     }
 }
 
+export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 export const userAgents = [
-    // Chrome on Windows
+    DEFAULT_USER_AGENT,
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    // Chrome on macOS
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    // Firefox on Windows
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-    // Firefox on macOS
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
-    // Safari on macOS
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
 ];
 
 export function getRandomUserAgent(): string {
-    return userAgents[Math.floor(Math.random() * userAgents.length)];
+    return DEFAULT_USER_AGENT;
 }
