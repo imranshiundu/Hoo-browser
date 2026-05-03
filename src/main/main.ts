@@ -58,14 +58,15 @@ function getPageUrlForRequest(details: any): string {
 
 function injectSitePolish(view: BrowserView): void {
     try {
-        void Promise.resolve(view.webContents.insertCSS(`
+        const css = `
             html, body { scrollbar-width: thin !important; }
             ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
             ::-webkit-scrollbar-track { background: transparent !important; }
             ::-webkit-scrollbar-thumb { background: rgba(140,140,140,.28) !important; border-radius: 999px !important; }
             ::-webkit-scrollbar-thumb:hover { background: rgba(180,180,180,.42) !important; }
             form[role="search"], [data-testid="searchbox"], .searchbox_searchbox__eaWKL { max-width: 820px !important; }
-        `)).catch((): undefined => undefined);
+        `;
+        void Promise.resolve((view.webContents.insertCSS as any)(css)).catch((): undefined => undefined);
     } catch {
         // Site CSS injection is cosmetic; never break page loading for it.
     }
@@ -239,18 +240,20 @@ function applyPrivacyToSession(ses: Electron.Session): void {
     });
 
     ses.webRequest.onHeadersReceived(filter, (details, callback): void => {
-        const lengthHeader = details.responseHeaders?.['content-length'] || details.responseHeaders?.['Content-Length'];
+        const responseHeadersIn = details.responseHeaders as unknown as Record<string, string[] | undefined> | undefined;
+        const lengthHeader = responseHeadersIn?.['content-length'] || responseHeadersIn?.['Content-Length'];
         const lengthValue = Array.isArray(lengthHeader) ? Number(lengthHeader[0]) : Number(lengthHeader);
         trackNetworkBytes(lengthValue);
-        const responseHeaders = stripJunkResponseHeaders(details.responseHeaders as any, details.url, getPageUrlForRequest(details)) as any;
-        callback({ responseHeaders });
+        const responseHeaders = stripJunkResponseHeaders(responseHeadersIn, details.url, getPageUrlForRequest(details));
+        (callback as any)({ responseHeaders });
     });
 
     ses.webRequest.onBeforeSendHeaders(filter, (details, callback): void => {
-        const requestHeaders = stripJunkRequestHeaders(details.requestHeaders as any, details.url, getPageUrlForRequest(details)) as Record<string, string>;
+        const headersIn = details.requestHeaders as unknown as Record<string, string | string[] | undefined>;
+        const requestHeaders = stripJunkRequestHeaders(headersIn, details.url, getPageUrlForRequest(details));
         if (privacySettings.deepSpoof && details.url.includes('web.whatsapp.com')) requestHeaders['User-Agent'] = WHATSAPP_UA;
         else requestHeaders['User-Agent'] = getRandomUserAgent();
-        callback({ requestHeaders });
+        (callback as any)({ requestHeaders });
     });
 }
 
