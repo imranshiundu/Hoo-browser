@@ -16,6 +16,11 @@ interface BrowserProps {
 const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTab = tabs.find(t => t.id === activeTabId);
+    const [splitTabId, setSplitTabId] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (!tabs.some(tab => tab.id === splitTabId)) setSplitTabId(null);
+    }, [tabs, splitTabId]);
 
     React.useEffect(() => {
         if (!containerRef.current || !window.electronAPI?.updateViewBounds || !activeTab) return;
@@ -44,25 +49,39 @@ const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) 
             observer.disconnect();
             window.removeEventListener('resize', updateBounds);
         };
-    }, [activeTabId, activeTab?.url]);
+    }, [activeTabId, activeTab?.url, splitTabId]);
 
     const handleNavigate = (url: string) => window.electronAPI?.navigateTab?.(activeTabId, url);
     const handleBack = () => window.electronAPI?.goBack(activeTabId);
     const handleForward = () => window.electronAPI?.goForward(activeTabId);
     const handleReload = () => window.electronAPI?.reload(activeTabId);
+    const handleSplitWithTab = (nextSplitTabId: string) => {
+        setSplitTabId(nextSplitTabId);
+        void window.electronAPI?.setMosaicView?.(activeTabId, nextSplitTabId);
+    };
+    const handleClearSplit = () => {
+        setSplitTabId(null);
+        void window.electronAPI?.clearMosaicView?.();
+    };
 
     return (
-        <main className="browser-container">
+        <main className={`browser-container ${splitTabId ? 'split-active' : ''}`}>
             <NavigationBar
                 tabId={activeTabId}
                 url={activeTab?.url || ''}
+                tabs={tabs}
+                splitTabId={splitTabId}
                 onNavigate={handleNavigate}
                 onBack={handleBack}
                 onForward={handleForward}
                 onReload={handleReload}
+                onSplitWithTab={handleSplitWithTab}
+                onClearSplit={handleClearSplit}
                 onOpenSettings={onOpenSettings}
             />
-            <section className="browser-view-container" id="browser-content" ref={containerRef} />
+            <section className="browser-view-container" id="browser-content" ref={containerRef}>
+                {splitTabId && <div className="split-screen-gutter" aria-hidden="true" />}
+            </section>
         </main>
     );
 };
