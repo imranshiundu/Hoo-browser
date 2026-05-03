@@ -1,6 +1,6 @@
 import React from 'react';
 import './SettingsModal.css';
-import { X, Shield, Download, RotateCw, Trash2, Wifi, PlayCircle, Type, Cookie, History, Brain, Lock } from 'lucide-react';
+import { X, Shield, Download, RotateCw, Trash2, Wifi, PlayCircle, Type, Cookie, History, Brain, Lock, CheckCircle2, AlertTriangle, Zap, RefreshCw } from 'lucide-react';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -46,7 +46,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     };
 
     const checkForUpdates = async (): Promise<void> => {
-        setUpdateState({ status: 'checking', message: 'Checking GitHub for Hoo Browser updates…' });
+        setUpdateState({ status: 'checking', message: 'Checking GitHub… pulling only what changed.' });
         try {
             const result = await window.electronAPI?.checkForUpdates?.();
             if (!result) {
@@ -61,6 +61,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         } catch (error: unknown) {
             setUpdateState({ status: 'failed', message: error instanceof Error ? error.message : 'Update failed.' });
         }
+    };
+
+    const restartHoo = (): void => {
+        window.close();
     };
 
     if (!isOpen) return null;
@@ -139,14 +143,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                         </button>
                     </section>
 
-                    <section className="settings-section">
+                    <section className="settings-section update-section">
                         <h3>Updates</h3>
-                        <button className="primary-button" onClick={() => void checkForUpdates()} disabled={updateState?.status === 'checking'}>
-                            <RotateCw size={16} /> {updateState?.status === 'checking' ? 'Checking…' : 'Check for updates'}
-                        </button>
+                        <div className="update-card">
+                            <div className="update-card-copy">
+                                <strong>Fast GitHub updater</strong>
+                                <span>Pulls changes, skips dependency install when package files did not change, then rebuilds only when needed.</span>
+                            </div>
+                            <button className="primary-button update-button" onClick={() => void checkForUpdates()} disabled={updateState?.status === 'checking'}>
+                                {updateState?.status === 'checking' ? <RefreshCw size={16} className="spin" /> : <Zap size={16} />}
+                                {updateState?.status === 'checking' ? 'Updating…' : 'Update now'}
+                            </button>
+                        </div>
                         {updateState && (
                             <div className={`update-message ${updateState.status}`}>
-                                <p>{updateState.message}</p>
+                                <div className="update-status-line">
+                                    {updateState.status === 'success' ? <CheckCircle2 size={16} /> : updateState.status === 'failed' ? <AlertTriangle size={16} /> : <RefreshCw size={16} className="spin" />}
+                                    <p>{updateState.message}</p>
+                                </div>
+                                {updateState.status === 'success' && updateState.message.toLowerCase().includes('restart') && (
+                                    <button className="secondary-button" onClick={restartHoo}>Close Hoo so I can restart</button>
+                                )}
                                 {updateState.details && <pre>{updateState.details}</pre>}
                             </div>
                         )}
