@@ -1,7 +1,7 @@
 import React from 'react';
 import './TitleBar.css';
 import { Minus, Square, X, RefreshCw } from 'lucide-react';
-import logo from '../assets/logo.png';
+import logo from '../assets/branding/hoo-app-icon.svg';
 
 const TitleBar: React.FC = () => {
     const handleMinimize = () => window.electronAPI?.minimize();
@@ -13,10 +13,10 @@ const TitleBar: React.FC = () => {
         <div className="title-bar">
             <div className="title-bar-drag">
                 <img src={logo} alt="" className="logo-mini" style={{ width: 14, height: 14, marginRight: 8 }} />
-                <span className="title-bar-text">ZEN BROWSER</span>
+                <span className="title-bar-text">HOO BROWSER</span>
             </div>
             <div className="window-controls">
-                <button className="control-btn refresh" onClick={handleReload} title="Force Restart System">
+                <button className="control-btn refresh" onClick={handleReload} title="Reload Hoo UI">
                     <RefreshCw size={14} />
                 </button>
                 <button className="control-btn minimize" onClick={handleMinimize} title="Minimize">
