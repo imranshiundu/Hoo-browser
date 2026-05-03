@@ -14,6 +14,9 @@ import { shouldBlockForLowData } from "./network-policy";
 app.setName("Hoo Browser");
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-systemd-scope');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,AutofillServerCommunication,Translate');
 
 let mainWindow: BrowserWindow | null = null;
@@ -28,7 +31,7 @@ let persistentData = StorageService.load();
 let privacySettings = {
     adShield: true,
     scriptFortress: false,
-    fingerprintCloak: true,
+    fingerprintCloak: false,
     forceHttps: true,
     deepSpoof: persistentData.settings?.deepSpoof ?? true,
     lowDataMode: persistentData.settings?.lowDataMode ?? false,
@@ -48,9 +51,13 @@ function resolveAssetPath(...segments: string[]) {
     return distAsset;
 }
 
+function getUrlForHeaders(detailsUrl: string, fallbackContents?: Electron.WebContents): string {
+    return detailsUrl || fallbackContents?.getURL() || '';
+}
+
 function attachViewHandlers(tabId: string, view: BrowserView) {
     view.setAutoResize({ width: true, height: true });
-    view.webContents.setBackgroundThrottling(true);
+    view.webContents.setBackgroundThrottling(false);
 
     view.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
         const url = webContents.getURL();
@@ -69,7 +76,7 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
                 Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
                 Object.defineProperty(navigator, 'userAgent', { get: () => '${WHATSAPP_UA}' });
                 console.log('[Hoo] Windows environment spoofed.');
-            `);
+            `).catch(() => undefined);
         } else {
             view.webContents.setUserAgent(getRandomUserAgent());
         }
@@ -114,7 +121,7 @@ function restoreTabs() {
                 contextIsolation: true,
                 partition: tab.partition ? `persist:${tab.partition}` : undefined,
                 sandbox: true,
-                backgroundThrottling: true,
+                backgroundThrottling: false,
             }
         });
         browserViews.set(tab.id, view);
@@ -138,7 +145,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             webviewTag: false,
-            backgroundThrottling: true,
+            backgroundThrottling: false,
         },
     });
 
@@ -220,8 +227,12 @@ function applyPrivacyToSession(ses: Electron.Session) {
     });
 
     ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
-        if (privacySettings.deepSpoof && details.url.includes('web.whatsapp.com')) details.requestHeaders['User-Agent'] = WHATSAPP_UA;
-        else if (privacySettings.fingerprintCloak) details.requestHeaders['User-Agent'] = getRandomUserAgent();
+        const targetUrl = getUrlForHeaders(details.url);
+        if (privacySettings.deepSpoof && targetUrl.includes('web.whatsapp.com')) {
+            details.requestHeaders['User-Agent'] = WHATSAPP_UA;
+        } else {
+            details.requestHeaders['User-Agent'] = getRandomUserAgent();
+        }
         callback({ requestHeaders: details.requestHeaders });
     });
 }
@@ -332,7 +343,7 @@ ipcMain.handle('get-initial-data', async () => {
 });
 
 function createBrowserViewForTab(tabId: string, partition?: string) {
-    const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partition ? `persist:${partition}` : undefined, sandbox: true, backgroundThrottling: true } });
+    const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partition ? `persist:${partition}` : undefined, sandbox: true, backgroundThrottling: false } });
     browserViews.set(tabId, view);
     applyPrivacyToSession(view.webContents.session);
     attachViewHandlers(tabId, view);
