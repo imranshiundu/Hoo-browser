@@ -87,23 +87,64 @@
 }
 
 .primary-button,
+.secondary-button,
 .danger-button {
     align-self: flex-start;
     min-height: 36px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    border-radius: 7px;
+    border-radius: 8px;
     padding: 0 14px;
-    font-weight: 700;
+    font-weight: 750;
     cursor: pointer;
     font-family: inherit;
 }
 .primary-button { background: #ff6a00; color: #fff; border: 1px solid #ff6a00; }
 .primary-button:hover { filter: brightness(1.08); }
-.primary-button:disabled { cursor: wait; opacity: .7; }
+.primary-button:disabled { cursor: wait; opacity: .75; }
+.secondary-button { background: rgba(255,255,255,.07); color: #fff; border: 1px solid rgba(255,255,255,.12); }
+.secondary-button:hover { background: rgba(255,255,255,.11); }
 .danger-button { background: transparent; color: #ff6a00; border: 1px solid rgba(255,106,0,.42); }
 .danger-button:hover { background: rgba(255,106,0,.08); }
+
+.update-section {
+    grid-column: span 2;
+}
+
+.update-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(255,106,0,.1), rgba(255,255,255,.035));
+}
+
+.update-card-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.update-card-copy strong {
+    font-size: 14px;
+    color: rgba(255,255,255,.94);
+}
+
+.update-card-copy span {
+    max-width: 520px;
+    color: rgba(255,255,255,.56);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.update-button {
+    flex: 0 0 auto;
+}
 
 .update-message {
     margin: 0;
@@ -112,8 +153,16 @@
     line-height: 1.5;
     color: rgba(255,255,255,.68);
     white-space: pre-wrap;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
-.update-message p { margin: 0 0 8px; }
+.update-status-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.update-message p { margin: 0; }
 .update-message pre {
     margin: 0;
     max-height: 170px;
@@ -128,6 +177,9 @@
 }
 .update-message.failed { color: #ff9b5a; }
 .update-message.success { color: #8ff0b1; }
+.spin { animation: hoo-spin .85s linear infinite; }
+@keyframes hoo-spin { to { transform: rotate(360deg); } }
+
 .muted-section p {
     margin: 0;
     display: flex;
@@ -139,4 +191,6 @@
 
 @media (max-width: 760px) {
     .settings-list { grid-template-columns: 1fr; }
+    .update-section { grid-column: span 1; }
+    .update-card { align-items: flex-start; flex-direction: column; }
 }
