@@ -13,33 +13,38 @@ interface BrowserProps {
     onOpenSettings?: () => void;
 }
 
-const Browser: React.FC<BrowserProps> = ({
-    tabs,
-    activeTabId,
-    onOpenSettings
-}) => {
+const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTab = tabs.find(t => t.id === activeTabId);
 
     React.useEffect(() => {
         if (!containerRef.current || !window.electronAPI?.updateViewBounds || !activeTab) return;
 
+        let raf = 0;
         const updateBounds = () => {
-            const rect = containerRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            window.electronAPI?.updateViewBounds({
-                x: Math.floor(rect.x),
-                y: Math.floor(rect.y),
-                width: Math.floor(rect.width),
-                height: Math.floor(rect.height)
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+                const rect = containerRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                window.electronAPI?.updateViewBounds({
+                    x: Math.max(0, Math.floor(rect.left)),
+                    y: Math.max(0, Math.floor(rect.top)),
+                    width: Math.max(100, Math.floor(rect.width)),
+                    height: Math.max(100, Math.floor(rect.height))
+                });
             });
         };
 
         const observer = new ResizeObserver(updateBounds);
         observer.observe(containerRef.current);
+        window.addEventListener('resize', updateBounds);
         updateBounds();
-        return () => observer.disconnect();
-    }, [activeTabId, activeTab]);
+        return () => {
+            cancelAnimationFrame(raf);
+            observer.disconnect();
+            window.removeEventListener('resize', updateBounds);
+        };
+    }, [activeTabId, activeTab?.url]);
 
     const handleNavigate = (url: string) => window.electronAPI?.navigateTab?.(activeTabId, url);
     const handleBack = () => window.electronAPI?.goBack(activeTabId);
@@ -47,7 +52,7 @@ const Browser: React.FC<BrowserProps> = ({
     const handleReload = () => window.electronAPI?.reload(activeTabId);
 
     return (
-        <div className="browser-container">
+        <main className="browser-container">
             <NavigationBar
                 tabId={activeTabId}
                 url={activeTab?.url || ''}
@@ -57,8 +62,8 @@ const Browser: React.FC<BrowserProps> = ({
                 onReload={handleReload}
                 onOpenSettings={onOpenSettings}
             />
-            <div className="browser-view-container" id="browser-content" ref={containerRef} />
-        </div>
+            <section className="browser-view-container" id="browser-content" ref={containerRef} />
+        </main>
     );
 };
 
