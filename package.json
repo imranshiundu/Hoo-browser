@@ -1,17 +1,27 @@
 {
   "name": "zen-browser",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.1.0",
+  "description": "A desktop browser experiment built with Electron, focused on practical privacy controls, Linux web-app compatibility, and local-first AI assistance.",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
-    "dev": "webpack --config webpack.config.js --watch",
-    "start": "electron . --no-sandbox",
-    "dev:start": "npm run build && npm run start"
+    "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
+    "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
+    "start": "electron .",
+    "start:unsafe-no-sandbox": "electron . --no-sandbox",
+    "dev:start": "npm run build && npm run start",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "electron",
+    "browser",
+    "privacy",
+    "linux",
+    "desktop-app"
+  ],
+  "author": "Imran Shiundu",
+  "license": "MIT",
   "devDependencies": {
     "@types/electron": "^1.4.38",
     "@types/node": "^25.2.0",
