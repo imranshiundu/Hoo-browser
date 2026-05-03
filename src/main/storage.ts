@@ -55,16 +55,7 @@ export interface StorageData {
 const STORAGE_FILE = path.join(app.getPath('userData'), 'user-data.json');
 
 const defaultData: StorageData = {
-    tabs: [
-        { id: 'home', type: 'home', title: 'Home' },
-        { id: 'dashboard', type: 'dashboard', title: 'Dashboard' },
-        { id: 'apps', type: 'apps', title: 'Apps' },
-        { id: 'rss', type: 'rss', title: 'RSS' },
-        { id: 'privacy', type: 'privacy', title: 'Privacy' },
-        { id: 'performance', type: 'performance', title: 'Performance' },
-        { id: 'bookmarks', type: 'bookmarks', title: 'Bookmarks' },
-        { id: 'extensions', type: 'extensions', title: 'Plugins' }
-    ],
+    tabs: [],
     history: [],
     downloads: [],
     crashedTabs: [],
@@ -78,6 +69,28 @@ const defaultData: StorageData = {
     activeTabId: 'home',
     lastUpdated: Date.now()
 };
+
+function normalizeStorageData(data: Partial<StorageData>): StorageData {
+    const browserTabs = (data.tabs || [])
+        .filter((tab: any) => tab?.type === 'browser')
+        .filter((tab: any) => tab.url && tab.url !== 'about:blank')
+        .slice(0, 12);
+
+    const activeTabId = browserTabs.some((tab: any) => tab.id === data.activeTabId)
+        ? data.activeTabId || 'home'
+        : 'home';
+
+    return {
+        ...defaultData,
+        ...data,
+        tabs: browserTabs,
+        activeTabId,
+        settings: { ...defaultData.settings, ...(data.settings || {}) },
+        history: data.history || [],
+        downloads: data.downloads || [],
+        crashedTabs: data.crashedTabs || []
+    };
+}
 
 export class StorageService {
     static encryptionAvailable(): boolean {
@@ -102,16 +115,19 @@ export class StorageService {
                 }
 
                 const data = JSON.parse(jsonString);
-                return {
-                    ...defaultData,
-                    ...data,
-                    settings: { ...defaultData.settings, ...(data.settings || {}) },
-                    downloads: data.downloads || [],
-                    crashedTabs: data.crashedTabs || []
-                };
+                return normalizeStorageData(data);
             }
         } catch (error) {
             console.error('[Storage] Error loading data:', error);
+            try {
+                if (fs.existsSync(STORAGE_FILE)) {
+                    const brokenPath = `${STORAGE_FILE}.broken-${Date.now()}`;
+                    fs.renameSync(STORAGE_FILE, brokenPath);
+                    console.warn(`[Storage] Broken profile data moved to ${brokenPath}. Starting clean instead of rendering stale tabs.`);
+                }
+            } catch (moveError) {
+                console.error('[Storage] Could not quarantine broken data:', moveError);
+            }
         }
         return defaultData;
     }
@@ -119,7 +135,7 @@ export class StorageService {
     static save(data: Partial<StorageData>) {
         try {
             const currentData = this.load();
-            const newData = { ...currentData, ...data, lastUpdated: Date.now() };
+            const newData = normalizeStorageData({ ...currentData, ...data, lastUpdated: Date.now() });
             const jsonString = JSON.stringify(newData, null, 2);
 
             if (safeStorage.isEncryptionAvailable()) {
