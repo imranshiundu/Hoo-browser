@@ -6,6 +6,9 @@ interface PrivacySettings {
     fingerprintCloak?: boolean;
     forceHttps?: boolean;
     deepSpoof?: boolean;
+    lowDataMode?: boolean;
+    blockThirdPartyFonts?: boolean;
+    blockAutoplayMedia?: boolean;
     dataRetention?: '1d' | '7d' | '30d' | 'forever';
 }
 
@@ -14,6 +17,40 @@ interface HooUpdateResult {
     status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed';
     message: string;
     details?: string;
+}
+
+interface HooPerformanceSnapshot {
+    startupMs: number;
+    uptimeSeconds: number;
+    cpu: number;
+    memory: {
+        processMb: number;
+        usedGb: string;
+        totalGb: string;
+    };
+    storage: {
+        usedBytes: number;
+        usedText: string;
+    };
+    tabs: {
+        active: number;
+        background: number;
+        totalBrowserViews: number;
+    };
+    network: {
+        requestCount: number;
+        approxReceivedBytes: number;
+        approxReceivedText: string;
+    };
+    profile: {
+        encryptionAvailable: boolean;
+        downloadsStored: number;
+        crashedTabsStored: number;
+    };
+    modes: {
+        lowDataMode: boolean;
+        aiLoaded: boolean;
+    };
 }
 
 interface ElectronAPI {
@@ -30,12 +67,9 @@ interface ElectronAPI {
     renameTab: (tabId: string, title: string) => Promise<void>;
     navigateTo: (url: string) => Promise<void>;
     updatePrivacySettings: (settings: PrivacySettings) => Promise<PrivacySettings>;
-    getInitialData: () => Promise<{ tabs: any[], history: any[], settings: PrivacySettings }>;
-    getSystemMetrics: () => Promise<{
-        cpu: number;
-        ram: { used: string; total: string };
-        storage: { usedBytes: number; usedText: string };
-    }>;
+    getInitialData: () => Promise<{ tabs: any[], history: any[], downloads?: any[], crashedTabs?: any[], settings: PrivacySettings }>;
+    getSystemMetrics: () => Promise<HooPerformanceSnapshot>;
+    getPerformanceSnapshot: () => Promise<HooPerformanceSnapshot>;
     nuclearWipe: () => Promise<void>;
     checkForUpdates: () => Promise<HooUpdateResult>;
     toggleSidebar: (collapsed: boolean) => Promise<void>;
