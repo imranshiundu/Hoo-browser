@@ -24,37 +24,62 @@ const TabStrip: React.FC<TabStripProps> = ({
 }) => {
     const [editingId, setEditingId] = React.useState<string | null>(null);
     const [editValue, setEditValue] = React.useState('');
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const activeTabRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+        activeTabRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }, [activeTabId, tabs.length]);
 
     const startEditing = (e: React.MouseEvent, tab: Tab) => {
         e.stopPropagation();
-        if (tab.id === 'home') return;
+        if (tab.type !== 'browser') return;
         setEditingId(tab.id);
         setEditValue(tab.title);
     };
 
     const submitRename = async (tabId: string) => {
         if (editValue.trim() && window.electronAPI?.renameTab) {
-            await window.electronAPI.renameTab(tabId, editValue);
+            await window.electronAPI.renameTab(tabId, editValue.trim());
         }
         setEditingId(null);
     };
 
+    const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+        if (!containerRef.current) return;
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+            containerRef.current.scrollLeft += event.deltaY;
+        } else {
+            containerRef.current.scrollLeft += event.deltaX;
+        }
+    };
+
     return (
         <div className="tab-strip">
-            <div className="tabs-container">
+            <div className="tabs-container" ref={containerRef} onWheel={handleWheel}>
                 {tabs.map(tab => {
                     const faviconUrl = getFaviconUrl(tab.url);
+                    const isActive = tab.id === activeTabId;
+                    const canClose = tabs.length > 1 || tab.type === 'browser';
                     return (
                         <div
                             key={tab.id}
-                            className={`tab-item ${tab.id === activeTabId ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''}`}
+                            ref={isActive ? activeTabRef : undefined}
+                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''}`}
                             onClick={() => onSwitchTab(tab.id)}
                             onDoubleClick={(e) => startEditing(e, tab)}
+                            onMouseDown={(e) => {
+                                if (e.button === 1 && canClose) {
+                                    e.preventDefault();
+                                    onCloseTab(tab.id);
+                                }
+                            }}
+                            title={tab.title}
                         >
                             {faviconUrl ? (
                                 <img className="tab-favicon-img" src={faviconUrl} alt="" draggable={false} />
                             ) : (
-                                <Globe size={14} className="tab-favicon" />
+                                <Globe size={15} className="tab-favicon" />
                             )}
 
                             {editingId === tab.id ? (
@@ -65,13 +90,13 @@ const TabStrip: React.FC<TabStripProps> = ({
                                     onChange={(e) => setEditValue(e.target.value)}
                                     onBlur={() => submitRename(tab.id)}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter') submitRename(tab.id);
+                                        if (e.key === 'Enter') void submitRename(tab.id);
                                         if (e.key === 'Escape') setEditingId(null);
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 />
                             ) : (
-                                <span className="tab-title" title={tab.title}>{tab.title}</span>
+                                <span className="tab-title">{tab.title || 'New Tab'}</span>
                             )}
 
                             <div className="tab-actions">
@@ -87,7 +112,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                                         <Columns size={12} />
                                     </button>
                                 )}
-                                {tab.type === 'browser' && (
+                                {canClose && (
                                     <button
                                         className="tab-action-btn close-btn"
                                         onClick={(e) => {
@@ -96,7 +121,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                                         }}
                                         title="Close tab"
                                     >
-                                        <X size={12} />
+                                        <X size={13} />
                                     </button>
                                 )}
                             </div>
@@ -105,7 +130,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                 })}
             </div>
             <button className="new-tab-btn" onClick={onCreateTab} title="New tab">
-                <Plus size={16} />
+                <Plus size={17} />
             </button>
         </div>
     );
