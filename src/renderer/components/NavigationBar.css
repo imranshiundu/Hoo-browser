@@ -1,27 +1,41 @@
 .navigation-bar {
-    height: 44px;
+    height: 42px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     padding: 5px 8px;
-    background: #0b0b0b;
+    background: linear-gradient(180deg, #0d0d0d, #090909);
     border-bottom: 1px solid #242424;
     z-index: 100;
     position: relative;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.nav-cluster {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+}
+
+.nav-actions-cluster,
+.nav-tools-cluster {
+    gap: 4px;
 }
 
 .nav-btn {
-    width: 32px;
-    height: 32px;
+    width: 31px;
+    height: 31px;
     display: grid;
     place-items: center;
     background: transparent;
     border: 0;
     color: rgba(255, 255, 255, 0.68);
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     flex: 0 0 auto;
+    transition: background .14s ease, color .14s ease, transform .08s ease;
 }
 
 .nav-btn:hover {
@@ -29,28 +43,40 @@
     color: #ffffff;
 }
 
-.shield-on svg {
-    color: #00d46a;
-}
+.nav-btn:active { transform: scale(.96); }
+
+.shield-on svg { color: #00d46a; }
 
 .address-form {
-    flex: 1;
-    min-width: 160px;
+    flex: 1 1 auto;
+    min-width: 180px;
+    max-width: 980px;
     height: 32px;
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 0 10px;
-    margin: 0 6px;
-    background: #1b1b1b;
-    border: 1px solid #2f2f2f;
-    border-radius: 7px;
+    margin: 0 2px;
+    background: #1a1a1a;
+    border: 1px solid #303030;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    transition: border-color .14s ease, background .14s ease, box-shadow .14s ease;
+}
+
+.address-form:hover {
+    background: #1f1f1f;
+    border-color: #3a3a3a;
 }
 
 .address-form:focus-within {
     border-color: #ff6a00;
-    background: #151515;
+    background: #101010;
+    box-shadow: 0 0 0 2px rgba(255,106,0,.16), inset 0 1px 0 rgba(255,255,255,.04);
 }
+
+.address-form.secure .security-indicator svg { color: #00d46a; }
+.address-form.external .security-indicator svg { color: #ff9a3d; }
 
 .security-indicator {
     display: grid;
@@ -59,9 +85,21 @@
     flex: 0 0 auto;
 }
 
-.security-indicator svg {
-    color: #ff6a00;
+.address-host-pill {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 750;
+    color: rgba(255,255,255,.78);
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.055);
+    border: 1px solid rgba(255,255,255,.055);
 }
+
+.address-form:focus-within .address-host-pill { display: none; }
 
 .address-input {
     flex: 1;
@@ -75,24 +113,22 @@
     font-family: inherit;
 }
 
-.address-input::placeholder {
-    color: rgba(255, 255, 255, 0.46);
-}
+.address-input::placeholder { color: rgba(255, 255, 255, 0.46); }
 
-.nav-menu-wrap {
+.nav-menu-wrap,
+.tools-menu-wrap {
     position: relative;
     flex: 0 0 auto;
 }
 
-.bookmarks-popover {
+.bookmarks-popover,
+.tools-popover {
     position: absolute;
     top: 38px;
     right: 0;
-    width: 320px;
-    max-height: 420px;
     overflow: auto;
     padding: 10px;
-    border-radius: 12px;
+    border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: rgba(18, 18, 18, 0.98);
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
@@ -100,6 +136,16 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    backdrop-filter: blur(18px);
+}
+
+.bookmarks-popover {
+    width: 330px;
+    max-height: 420px;
+}
+
+.tools-popover {
+    width: 180px;
 }
 
 .bookmarks-popover strong {
@@ -108,18 +154,28 @@
     padding: 4px 6px 8px;
 }
 
-.bookmarks-popover button {
+.bookmarks-popover button,
+.tools-popover button {
     min-width: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: 9px;
     padding: 8px;
     background: transparent;
     color: rgba(255, 255, 255, 0.84);
     text-align: left;
     cursor: pointer;
+    font: inherit;
 }
 
-.bookmarks-popover button:hover {
+.tools-popover button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+}
+
+.bookmarks-popover button:hover,
+.tools-popover button:hover {
     background: rgba(255, 255, 255, 0.08);
 }
 
@@ -131,12 +187,28 @@
     text-overflow: ellipsis;
 }
 
-.bookmarks-popover span {
-    font-size: 13px;
-}
+.bookmarks-popover span { font-size: 13px; }
 
 .bookmarks-popover small,
 .empty-bookmarks {
     font-size: 11px;
     color: rgba(255, 255, 255, 0.45);
+}
+
+.tools-menu-wrap { display: none; }
+
+@media (max-width: 1100px) {
+    .optional-tool { display: none; }
+    .tools-menu-wrap { display: block; }
+    .address-host-pill { max-width: 130px; }
+}
+
+@media (max-width: 760px) {
+    .navigation-bar { gap: 5px; padding-inline: 6px; }
+    .nav-history-cluster .nav-btn:nth-child(2),
+    .nav-actions-cluster,
+    .settings-btn { display: none; }
+    .tools-menu-wrap { display: block; }
+    .address-form { min-width: 120px; }
+    .address-host-pill { display: none; }
 }
