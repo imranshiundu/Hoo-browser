@@ -3,8 +3,11 @@
     flex-direction: column;
     height: 100%;
     overflow-y: auto;
-    padding: 28px 32px;
-    background: var(--bg-primary);
+    padding: 30px 34px;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(222, 88, 51, 0.09), transparent 28%),
+        radial-gradient(circle at 90% 0%, rgba(34, 197, 94, 0.08), transparent 30%),
+        var(--bg-primary);
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
@@ -13,67 +16,107 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     text-align: center;
 }
 
 .shield-container {
     position: relative;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
 }
 
 .giant-shield {
-    color: var(--accent-green);
-    filter: drop-shadow(0 0 30px rgba(34, 197, 94, 0.3));
+    color: #de5833;
+    filter: drop-shadow(0 0 34px rgba(222, 88, 51, 0.28));
 }
 
 .shield-glow {
     position: absolute;
-    inset: -20px;
-    background: radial-gradient(circle, rgba(34, 197, 94, 0.1) 0%, transparent 70%);
+    inset: -22px;
+    background: radial-gradient(circle, rgba(222, 88, 51, 0.12) 0%, transparent 70%);
     border-radius: 50%;
     pointer-events: none;
 }
 
+.eyebrow {
+    margin: 0 0 8px;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 800;
+}
+
 .privacy-title {
-    font-size: 24px;
-    font-weight: 700;
+    max-width: 680px;
+    font-size: clamp(28px, 4vw, 48px);
+    line-height: 1;
+    letter-spacing: -1.8px;
+    font-weight: 750;
     color: var(--text-primary);
-    margin: 0 0 6px;
+    margin: 0 0 12px;
 }
 
 .privacy-description {
     font-size: 14px;
     color: var(--text-secondary);
-    margin: 0 0 12px;
+    margin: 0 0 14px;
 }
 
 .saved-badge {
     color: #4ade80;
-    font-weight: 600;
+    font-weight: 700;
+}
+
+.status-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .security-badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 16px;
+    padding: 7px 14px;
     border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
     background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    border: 1px solid rgba(34, 197, 94, 0.26);
     color: #4ade80;
 }
 
 .security-badge.partial {
     background: rgba(245, 158, 11, 0.1);
-    border-color: rgba(245, 158, 11, 0.3);
+    border-color: rgba(245, 158, 11, 0.28);
     color: #fbbf24;
 }
 
+.encryption-card {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto 14px;
+    padding: 18px;
+    border-radius: 18px;
+    background: rgba(222, 88, 51, 0.08);
+    border: 1px solid rgba(222, 88, 51, 0.18);
+}
+
+.encryption-icon {
+    color: #de5833;
+    background: rgba(222, 88, 51, 0.1);
+}
+
 .privacy-modules {
+    max-width: 960px;
+    width: 100%;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -84,22 +127,33 @@
     align-items: flex-start;
     gap: 16px;
     padding: 16px 18px;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.035);
     transition: all 0.2s;
 }
 
+.privacy-module:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
 .privacy-module.on {
-    border-color: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.13);
 }
 
 .privacy-module.off {
-    opacity: 0.7;
+    opacity: 0.72;
 }
 
 .mod-icon {
-    margin-top: 2px;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.045);
     flex-shrink: 0;
 }
 
@@ -110,21 +164,22 @@
 .mod-title-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 5px;
 }
 
 .mod-title {
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-primary);
 }
 
 .mod-status {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    padding: 2px 8px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.7px;
+    padding: 3px 8px;
     border-radius: 10px;
 }
 
@@ -134,7 +189,7 @@
 }
 
 .mod-status.inactive {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.06);
     color: var(--text-secondary);
 }
 
@@ -142,17 +197,16 @@
     font-size: 12px;
     color: var(--text-secondary);
     margin: 0;
-    line-height: 1.5;
+    line-height: 1.55;
 }
 
-/* Toggle */
 .toggle-switch {
     position: relative;
     display: inline-block;
     width: 44px;
     height: 24px;
     flex-shrink: 0;
-    margin-top: 2px;
+    margin-top: 8px;
 }
 
 .toggle-switch input {
@@ -195,8 +249,8 @@
 .retention-select {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 6px 10px;
+    border-radius: 10px;
+    padding: 8px 10px;
     color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
@@ -206,4 +260,21 @@
 
 .retention-select option {
     background: #1a1a1e;
+}
+
+.privacy-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.privacy-note svg {
+    color: #de5833;
+    flex-shrink: 0;
 }
