@@ -230,6 +230,24 @@ function setupPrivacyFilters() {
     applyPrivacyToSession(session.defaultSession);
 }
 
+function raiseBrowserViews() {
+    if (!mainWindow) return;
+    if (activeTabId) {
+        const activeView = browserViews.get(activeTabId);
+        if (activeView) {
+            mainWindow.removeBrowserView(activeView);
+            mainWindow.addBrowserView(activeView);
+        }
+    }
+    if (splitTabId) {
+        const splitView = browserViews.get(splitTabId);
+        if (splitView) {
+            mainWindow.removeBrowserView(splitView);
+            mainWindow.addBrowserView(splitView);
+        }
+    }
+}
+
 function updateBrowserViewBounds() {
     if (!mainWindow || !activeTabId) return;
     const content = mainWindow.getContentBounds();
@@ -240,16 +258,25 @@ function updateBrowserViewBounds() {
         height: Math.max(100, content.height - 118)
     };
 
+    const safeBounds = {
+        x: Math.max(0, Math.floor(bounds.x)),
+        y: Math.max(0, Math.floor(bounds.y)),
+        width: Math.max(100, Math.floor(bounds.width)),
+        height: Math.max(100, Math.floor(bounds.height))
+    };
+
     if (activeTabId && splitTabId) {
         const view1 = browserViews.get(activeTabId);
         const view2 = browserViews.get(splitTabId);
-        const splitWidth = Math.floor((bounds.width - 8) / 2);
-        if (view1) view1.setBounds({ x: bounds.x, y: bounds.y, width: splitWidth, height: bounds.height });
-        if (view2) view2.setBounds({ x: bounds.x + splitWidth + 8, y: bounds.y, width: splitWidth, height: bounds.height });
+        const splitWidth = Math.floor((safeBounds.width - 8) / 2);
+        if (view1) view1.setBounds({ x: safeBounds.x, y: safeBounds.y, width: splitWidth, height: safeBounds.height });
+        if (view2) view2.setBounds({ x: safeBounds.x + splitWidth + 8, y: safeBounds.y, width: splitWidth, height: safeBounds.height });
     } else {
         const view = browserViews.get(activeTabId);
-        if (view) view.setBounds(bounds);
+        if (view) view.setBounds(safeBounds);
     }
+
+    raiseBrowserViews();
 }
 
 function showBrowserView(tabId: string, isSplit = false) {
