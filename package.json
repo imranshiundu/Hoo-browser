@@ -8,8 +8,8 @@
     "build": "webpack --config webpack.config.js",
     "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
-    "start": "electron .",
-    "start:unsafe-no-sandbox": "electron . --no-sandbox",
+    "start": "electron . --no-sandbox",
+    "start:sandbox": "electron .",
     "dev:start": "npm run build && npm run start",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run build",
@@ -50,6 +50,7 @@
         "deb"
       ],
       "category": "Network",
+      "icon": "src/renderer/assets/branding/hoo-app-icon.png",
       "synopsis": "Owl-guided privacy-first desktop browser",
       "description": "Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and a calm owl-guided browsing experience."
     },
@@ -58,6 +59,7 @@
         "nsis",
         "portable"
       ],
+      "icon": "src/renderer/assets/branding/hoo-app-icon.png",
       "publisherName": "Imran Shiundu"
     },
     "nsis": {
@@ -72,6 +74,7 @@
         "dmg",
         "zip"
       ],
+      "icon": "src/renderer/assets/branding/hoo-app-icon.png",
       "category": "public.app-category.productivity"
     }
   },
