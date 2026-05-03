@@ -11,6 +11,8 @@ export const adBlockRules = [
     'adservice.google.com',
     'ads.youtube.com',
     'youtube.com/api/stats/ads',
+    'youtube.com/pagead/',
+    'googlevideo.com/videoplayback/id/ad',
     'facebook.com/tr',
     'scorecardresearch.com',
     'quantserve.com',
@@ -35,6 +37,16 @@ export const adBlockRules = [
     'amplitude.com',
     'heap.io',
     'fullstory.com',
+    'safety-torrenting.com',
+    'torrenting.com',
+    'onclickads.net',
+    'popads.net',
+    'popcash.net',
+    'propellerads.com',
+    'pushtraffic.net',
+    'trafficjunky.net',
+    'exoclick.com',
+    'juicyads.com',
 ];
 
 export const trackerBlockRules = [
@@ -48,14 +60,38 @@ export const trackerBlockRules = [
     '/event?',
     '/ptracking?',
     '/api/stats/ads',
+    '/api/stats/qoe',
     '/pagead/',
     '/pcs/activeview',
+    'adformat=',
+    'ad_type=',
+    'adunit',
+    'preroll',
+    'midroll',
+    'vast.xml',
+    'redirect?',
+    'popunder',
+    'onclick',
+];
+
+export const hardBlockedHosts = [
+    'safety-torrenting.com',
+    'torrenting.com',
+    'onclickads.net',
+    'popads.net',
+    'popcash.net',
+    'propellerads.com',
+    'pushtraffic.net',
+    'trafficjunky.net',
+    'exoclick.com',
+    'juicyads.com',
 ];
 
 const adBlockSet = new Set(adBlockRules);
+const hardBlockSet = new Set(hardBlockedHosts);
 const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com', 'accounts.google.com'];
 
-function hostMatches(hostname: string, rule: string): boolean {
+export function hostMatches(hostname: string, rule: string): boolean {
     return hostname === rule || hostname.endsWith(`.${rule}`);
 }
 
@@ -68,10 +104,38 @@ function isSafeHeavyHost(url: string): boolean {
     }
 }
 
+export function isHardBlockedHost(url: string): boolean {
+    try {
+        const hostname = new URL(url).hostname.toLowerCase();
+        for (const domain of hardBlockSet) {
+            if (hostMatches(hostname, domain)) return true;
+        }
+        return false;
+    } catch {
+        return false;
+    }
+}
+
+export function isLikelyForcedRedirect(targetUrl: string, sourceUrl?: string): boolean {
+    if (!sourceUrl || sourceUrl.startsWith('about:') || sourceUrl.startsWith('hoo:')) return false;
+    try {
+        const source = new URL(sourceUrl);
+        const target = new URL(targetUrl);
+        if (source.hostname === target.hostname) return false;
+        if (target.hostname.endsWith(`.${source.hostname}`) || source.hostname.endsWith(`.${target.hostname}`)) return false;
+        if (isHardBlockedHost(targetUrl)) return true;
+        const targetLower = targetUrl.toLowerCase();
+        return ['torrent', 'vpn', 'hide-my-ip', 'adult', 'casino', 'bet', 'claim', 'prize', 'download-now'].some(signal => targetLower.includes(signal));
+    } catch {
+        return false;
+    }
+}
+
 export function shouldBlockRequest(url: string, resourceType?: string): boolean {
     const urlLower = url.toLowerCase();
     if (isSafeHeavyHost(urlLower)) return false;
     if (resourceType === 'beacon' || resourceType === 'ping') return true;
+    if (isHardBlockedHost(urlLower)) return true;
 
     try {
         const parsedUrl = new URL(urlLower);
@@ -142,7 +206,8 @@ export async function isMaliciousUrl(url: string): Promise<boolean> {
             'phish-discovery.com',
             'login-verify-account.net',
             'secure-banking-update.io',
-            'testsafebrowsing.appspot.com'
+            'testsafebrowsing.appspot.com',
+            ...hardBlockedHosts,
         ];
         if (!url || !url.includes('://')) return false;
         const host = new URL(url).hostname;
