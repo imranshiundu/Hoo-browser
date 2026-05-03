@@ -13,6 +13,7 @@ import { shouldBlockForLowData } from "./network-policy";
 
 app.setName("Hoo Browser");
 app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-systemd-scope');
 app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,AutofillServerCommunication,Translate');
 
 let mainWindow: BrowserWindow | null = null;
@@ -40,7 +41,18 @@ let privacySettings = {
 
 const WHATSAPP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) WhatsApp/2.24.4.78 Chrome/120.0.6099.225 Electron/30.0.0 Safari/537.36";
 
+function resolveAssetPath(...segments: string[]) {
+    const distAsset = path.join(__dirname, "../renderer", ...segments);
+    if (fs.existsSync(distAsset)) return distAsset;
+    const sourceAsset = path.join(__dirname, "../../src/renderer", ...segments);
+    if (fs.existsSync(sourceAsset)) return sourceAsset;
+    return distAsset;
+}
+
 function attachViewHandlers(tabId: string, view: BrowserView) {
+    view.setAutoResize({ width: true, height: true });
+    view.webContents.setBackgroundThrottling(true);
+
     view.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
         const url = webContents.getURL();
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com') && permission === 'media') {
@@ -51,6 +63,7 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
     });
 
     view.webContents.on('did-start-navigation', (_event, url) => {
+        mainWindow?.webContents.send('tab-loading-state', tabId, true, url);
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com')) {
             console.log(`[DeepSpoof] Hijacking environment for WhatsApp...`);
             view.webContents.setUserAgent(WHATSAPP_UA);
@@ -67,7 +80,13 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
     view.webContents.on('did-finish-load', () => {
         const title = view.webContents.getTitle();
         const url = view.webContents.getURL();
+        mainWindow?.webContents.send('tab-loading-state', tabId, false, url);
         if (title) mainWindow?.webContents.send('tab-title-updated', tabId, title, url);
+    });
+
+    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+        mainWindow?.webContents.send('tab-loading-state', tabId, false, validatedURL);
+        mainWindow?.webContents.send('tab-load-error', tabId, errorCode, errorDescription, validatedURL);
     });
 
     view.webContents.on('page-title-updated', (_event, title) => {
@@ -87,24 +106,29 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
 function restoreTabs() {
     if (!persistentData.tabs) return;
 
-    persistentData.tabs.forEach((tab: any) => {
-        if (tab.type === 'browser') {
-            const view = new BrowserView({
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true,
-                    partition: tab.partition ? `persist:${tab.partition}` : undefined,
-                    sandbox: true,
-                    backgroundThrottling: true,
-                }
-            });
+    const tabs = [...persistentData.tabs].sort((a: any, b: any) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+    const activeRestoreId = persistentData.activeTabId || tabs.find((tab: any) => tab.type === 'browser')?.id;
 
-            browserViews.set(tab.id, view);
-            applyPrivacyToSession(view.webContents.session);
-            attachViewHandlers(tab.id, view);
+    tabs.forEach((tab: any) => {
+        if (tab.type !== 'browser') return;
+        const shouldLoadNow = tab.id === activeRestoreId;
+        if (!shouldLoadNow) return;
 
-            if (tab.url) view.webContents.loadURL(tab.url);
-        }
+        const view = new BrowserView({
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                partition: tab.partition ? `persist:${tab.partition}` : undefined,
+                sandbox: true,
+                backgroundThrottling: true,
+            }
+        });
+
+        browserViews.set(tab.id, view);
+        applyPrivacyToSession(view.webContents.session);
+        attachViewHandlers(tab.id, view);
+
+        if (tab.url) view.webContents.loadURL(tab.url);
     });
 }
 
@@ -114,6 +138,7 @@ function createWindow() {
         width: 1400,
         frame: false,
         title: "Hoo Browser",
+        icon: resolveAssetPath('assets/branding/hoo-app-icon.svg'),
         backgroundColor: "#0E1111",
         titleBarStyle: 'hidden',
         webPreferences: {
@@ -158,7 +183,12 @@ ipcMain.handle('hide-browser-view', async () => {
 });
 
 ipcMain.handle('update-view-bounds', async (_event, bounds: { x: number, y: number, width: number, height: number }) => {
-    manualBounds = bounds;
+    manualBounds = {
+        x: Math.max(0, Math.floor(bounds.x)),
+        y: Math.max(0, Math.floor(bounds.y)),
+        width: Math.max(100, Math.floor(bounds.width)),
+        height: Math.max(100, Math.floor(bounds.height))
+    };
     updateBrowserViewBounds();
 });
 
@@ -261,11 +291,17 @@ function showBrowserView(tabId: string, isSplit = false) {
     browserViews.forEach(view => mainWindow!.removeBrowserView(view));
     if (activeTabId) {
         const view = browserViews.get(activeTabId);
-        if (view) mainWindow.addBrowserView(view);
+        if (view) {
+            mainWindow.addBrowserView(view);
+            mainWindow.setTopBrowserView(view);
+        }
     }
     if (splitTabId) {
         const view = browserViews.get(splitTabId);
-        if (view) mainWindow.addBrowserView(view);
+        if (view) {
+            mainWindow.addBrowserView(view);
+            mainWindow.setTopBrowserView(view);
+        }
     }
     updateBrowserViewBounds();
 }
@@ -305,13 +341,18 @@ ipcMain.handle('get-initial-data', async () => {
     return { tabs: data.tabs, history: data.history, downloads: data.downloads, crashedTabs: data.crashedTabs, settings: privacySettings, activeTabId: data.activeTabId };
 });
 
-ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isApp?: boolean, title?: string) => {
-    if (!mainWindow) return null;
-    const tabId = Date.now().toString();
+function createBrowserViewForTab(tabId: string, partition?: string) {
     const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partition ? `persist:${partition}` : undefined, sandbox: true, backgroundThrottling: true } });
     browserViews.set(tabId, view);
     applyPrivacyToSession(view.webContents.session);
     attachViewHandlers(tabId, view);
+    return view;
+}
+
+ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isApp?: boolean, title?: string) => {
+    if (!mainWindow) return null;
+    const tabId = Date.now().toString();
+    const view = createBrowserViewForTab(tabId, partition);
     showBrowserView(tabId);
 
     if (url && url !== 'about:blank') {
@@ -328,9 +369,13 @@ ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isA
 });
 
 ipcMain.handle('switch-tab', async (_event, tabId: string) => {
-    showBrowserView(tabId);
     const data = StorageService.load();
     const tab = data.tabs.find(t => t.id === tabId);
+    if (tab && !browserViews.has(tabId)) {
+        const view = createBrowserViewForTab(tabId, tab.partition);
+        if (tab.url && tab.url !== 'about:blank') view.webContents.loadURL(tab.url);
+    }
+    showBrowserView(tabId);
     if (tab) tab.lastActiveAt = Date.now();
     StorageService.save({ tabs: data.tabs, activeTabId: tabId });
     return tabId;
@@ -375,12 +420,12 @@ ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string) => {
         const stData = StorageService.load();
         const tab = stData.tabs.find(t => t.id === tabId);
         if (tab) {
-            tab.url = url;
+            tab.url = finalUrl;
             tab.lastActiveAt = Date.now();
             StorageService.save({ tabs: stData.tabs });
         }
         const data = StorageService.load();
-        data.history.push({ url, title: view.webContents.getTitle() || url, timestamp: Date.now() });
+        data.history.push({ url: finalUrl, title: view.webContents.getTitle() || finalUrl, timestamp: Date.now() });
         StorageService.save({ history: data.history });
     } catch (error) {
         console.error(`[Main] Failed to load URL ${url}:`, error);
@@ -389,11 +434,13 @@ ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string) => {
 
 ipcMain.handle('go-back', async (_event, tabId: string) => {
     const view = browserViews.get(tabId);
-    if (view?.webContents.canGoBack()) view.webContents.goBack();
+    const history = view?.webContents.navigationHistory;
+    if (history?.canGoBack()) history.goBack();
 });
 ipcMain.handle('go-forward', async (_event, tabId: string) => {
     const view = browserViews.get(tabId);
-    if (view?.webContents.canGoForward()) view.webContents.goForward();
+    const history = view?.webContents.navigationHistory;
+    if (history?.canGoForward()) history.goForward();
 });
 ipcMain.handle('reload', async (_event, tabId: string) => browserViews.get(tabId)?.webContents.reload());
 
@@ -429,10 +476,7 @@ ipcMain.handle('navigate-to', async (_event, url: string) => {
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) finalUrl = 'https://' + url;
     if (await isMaliciousUrl(finalUrl)) return null;
     const tabId = Date.now().toString();
-    const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: true } });
-    browserViews.set(tabId, view);
-    applyPrivacyToSession(view.webContents.session);
-    attachViewHandlers(tabId, view);
+    const view = createBrowserViewForTab(tabId);
     showBrowserView(tabId);
     view.webContents.loadURL(finalUrl);
     const data = StorageService.load();
