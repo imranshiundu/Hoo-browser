@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import './Home.css';
-import { Search, Lock, Github, MessageSquare, Mail, Video, Newspaper, Shield, Globe2, KeyRound } from 'lucide-react';
+import { Search, Lock, Github, MessageSquare, Mail, Video, Newspaper, Shield, Globe2, KeyRound, Plus } from 'lucide-react';
+
+const hooIcon = require('../assets/branding/hoo-app-icon.svg');
+const hooWallpaper = require('../assets/branding/hoo-wallpaper.svg');
 
 const Home: React.FC = () => {
     const [time, setTime] = useState(new Date());
@@ -25,17 +28,17 @@ const Home: React.FC = () => {
             url = 'https://' + query;
         } else {
             switch (activeEngine) {
-                case 'duckduckgo':
-                    url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-                    break;
                 case 'startpage':
                     url = `https://www.startpage.com/search?q=${encodeURIComponent(query)}`;
                     break;
                 case 'qwant':
                     url = `https://www.qwant.com/?q=${encodeURIComponent(query)}`;
                     break;
-                default:
+                case 'google':
                     url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                    break;
+                default:
+                    url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
             }
         }
 
@@ -46,17 +49,17 @@ const Home: React.FC = () => {
 
     const getGreeting = () => {
         const hour = time.getHours();
-        if (hour < 12) return 'Good morning';
-        if (hour < 18) return 'Good afternoon';
-        return 'Good evening';
+        if (hour < 12) return "Good morning. Hoo's got your back.";
+        if (hour < 18) return "Good afternoon. Hoo's watching the web with you.";
+        return 'Good evening. Night mode suits an owl.';
     };
 
     const speedDialLinks = [
         { icon: MessageSquare, label: 'WhatsApp', url: 'https://web.whatsapp.com' },
         { icon: Github, label: 'GitHub', url: 'https://github.com' },
+        { icon: Video, label: 'YouTube', url: 'https://youtube.com' },
+        { icon: Newspaper, label: 'Reddit', url: 'https://reddit.com' },
         { icon: Mail, label: 'Proton', url: 'https://mail.proton.me' },
-        { icon: Video, label: 'Invidious', url: 'https://invidious.io' },
-        { icon: Newspaper, label: 'News', url: 'https://news.ycombinator.com' },
     ];
 
     const handleSpeedDialClick = (url: string) => {
@@ -75,39 +78,42 @@ const Home: React.FC = () => {
     };
 
     return (
-        <div className="home-container">
-            <div className="home-grid" />
+        <div className="home-container" style={{ backgroundImage: `url(${hooWallpaper.default || hooWallpaper})` }}>
+            <div className="home-vignette" />
             <div className="home-content animate-fade-in">
+                <div className="brand-lockup">
+                    <img src={hooIcon.default || hooIcon} alt="Hoo Browser owl icon" className="brand-icon" />
+                    <div className="brand-wordmark" aria-label="Hoo Browser">
+                        <span className="brand-hoo">Hoo</span><span className="brand-browser">Browser</span>
+                    </div>
+                </div>
+
                 <div className="product-pill">
                     <Shield size={14} />
-                    <span>DUCKDUCKGO-FIRST · LOCAL PROFILE · WEB APP READY</span>
+                    <span>OWL-GUIDED · PRIVACY-FIRST · WEB FREEDOM</span>
                 </div>
 
                 <section className="hero-copy">
                     <div className="time">{time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
-                    <p className="greeting">{getGreeting()}, Zen User</p>
-                    <h1>Browse clean. Keep apps separate. Search with DuckDuckGo.</h1>
+                    <p className="greeting">{getGreeting()}</p>
+                    <h1>Private search. No tracking. Just results.</h1>
                     <p className="hero-subtitle">
-                        A Linux-first browser shell for private search, isolated web apps, practical shields, and encrypted local profile storage where your OS supports it.
+                        Hoo is a DuckDuckGo-first desktop browser for isolated web apps, practical protection, calm navigation, and Linux-first freedom.
                     </p>
                 </section>
 
                 <div className="search-stack">
                     <form onSubmit={handleSearch} className="search-container">
-                        <div className="search-engine-preview">
-                            {getEngineIcon()}
-                        </div>
+                        <div className="search-engine-preview">{getEngineIcon()}</div>
                         <input
                             type="text"
-                            placeholder="Search DuckDuckGo or enter a URL"
+                            placeholder="Search with DuckDuckGo or enter an address"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="search-input"
                             autoFocus
                         />
-                        <button type="submit" className="search-submit" aria-label="Search or navigate">
-                            <Search size={18} />
-                        </button>
+                        <button type="submit" className="search-submit" aria-label="Search or navigate">›</button>
                     </form>
 
                     <div className="engine-selectors" aria-label="Search engine selector">
@@ -116,12 +122,6 @@ const Home: React.FC = () => {
                         <button className={activeEngine === 'qwant' ? 'active' : ''} onClick={() => setActiveEngine('qwant')}>Qwant</button>
                         <button className={activeEngine === 'google' ? 'active fallback-engine' : 'fallback-engine'} onClick={() => setActiveEngine('google')}>Google fallback</button>
                     </div>
-                </div>
-
-                <div className="trust-strip">
-                    <div><Shield size={16} /><span>Practical shields</span></div>
-                    <div><KeyRound size={16} /><span>Encryption-aware storage</span></div>
-                    <div><MessageSquare size={16} /><span>WhatsApp profile</span></div>
                 </div>
 
                 <div className="speed-dial">
@@ -134,12 +134,17 @@ const Home: React.FC = () => {
                             </button>
                         );
                     })}
+                    <button className="speed-dial-item add-app" type="button">
+                        <div className="speed-dial-icon"><Plus size={24} /></div>
+                        <span className="speed-dial-label">Add App</span>
+                    </button>
                 </div>
             </div>
 
             <div className="home-footer">
-                <span>Zen Browser Foundation</span>
-                <span>Daily-driver status: prototype, hardening in progress</span>
+                <span><Shield size={16} /> DuckDuckGo-first</span>
+                <span><KeyRound size={16} /> Website protection</span>
+                <span><Globe2 size={16} /> Linux-first</span>
             </div>
         </div>
     );
