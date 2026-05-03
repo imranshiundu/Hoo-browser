@@ -135,7 +135,15 @@ export class StorageService {
     static save(data: Partial<StorageData>) {
         try {
             const currentData = this.load();
-            const newData = normalizeStorageData({ ...currentData, ...data, lastUpdated: Date.now() });
+            const mergedSettings = data.settings
+                ? { ...currentData.settings, ...data.settings }
+                : currentData.settings;
+            const newData = normalizeStorageData({
+                ...currentData,
+                ...data,
+                settings: mergedSettings,
+                lastUpdated: Date.now()
+            });
             const jsonString = JSON.stringify(newData, null, 2);
 
             if (safeStorage.isEncryptionAvailable()) {
