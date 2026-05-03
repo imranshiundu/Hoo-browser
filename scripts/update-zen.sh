@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-INSTALL_DIR="${ZEN_INSTALL_DIR:-$HOME/.local/share/zen-browser}"
-BRANCH="${ZEN_BRANCH:-main}"
+INSTALL_DIR="${HOO_INSTALL_DIR:-$HOME/.local/share/hoo-browser}"
+BRANCH="${HOO_BRANCH:-main}"
 QUIET=0
 
 if [[ "${1:-}" == "--quiet" ]]; then
@@ -11,26 +11,18 @@ fi
 
 log() {
   if [[ "$QUIET" -eq 0 ]]; then
-    printf '\033[1;34m[Zen update]\033[0m %s\n' "$*"
+    printf '\033[1;34m[Hoo update]\033[0m %s\n' "$*"
   fi
 }
 
-warn() {
-  printf '\033[1;33m[Zen update warning]\033[0m %s\n' "$*" >&2
-}
-
-fail() {
-  printf '\033[1;31m[Zen update error]\033[0m %s\n' "$*" >&2
-  exit 1
-}
+warn() { printf '\033[1;33m[Hoo update warning]\033[0m %s\n' "$*" >&2; }
+fail() { printf '\033[1;31m[Hoo update error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 command -v git >/dev/null 2>&1 || fail "git is required"
 command -v npm >/dev/null 2>&1 || fail "npm is required"
-
-[[ -d "$INSTALL_DIR/.git" ]] || fail "Zen Browser is not installed at $INSTALL_DIR"
+[[ -d "$INSTALL_DIR/.git" ]] || fail "Hoo Browser is not installed at $INSTALL_DIR"
 
 cd "$INSTALL_DIR"
-
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$CURRENT_BRANCH" != "$BRANCH" ]]; then
   log "Switching from $CURRENT_BRANCH to $BRANCH"
@@ -52,13 +44,10 @@ if ! git merge-base --is-ancestor "$LOCAL_SHA" "$REMOTE_SHA"; then
   exit 2
 fi
 
-log "Updating Zen Browser"
+log "Updating Hoo Browser"
 git pull --ff-only origin "$BRANCH"
-
 log "Installing dependencies"
 npm install
-
 log "Building app"
 npm run build
-
 log "Update complete"
