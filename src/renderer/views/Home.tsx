@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './Home.css';
-import { Search, Newspaper, Settings, BookmarkPlus, Trash2 } from 'lucide-react';
-import { Bookmark, getFaviconUrl } from '../types';
+import { Search, Settings, BookmarkPlus } from 'lucide-react';
+import { getFaviconUrl } from '../types';
 
 const hooIcon = require('../assets/branding/hoo-app-icon.svg');
 const fallbackWallpaper = require('../assets/branding/hoo-wallpaper.svg');
@@ -14,31 +14,18 @@ interface HomeProps {
 
 const BOOKMARK_KEY = 'hoo:bookmarks';
 
-const readBookmarks = (): Bookmark[] => {
-    try {
-        return JSON.parse(localStorage.getItem(BOOKMARK_KEY) || '[]');
-    } catch {
-        return [];
-    }
-};
-
 const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [bookmarks, setBookmarks] = useState<Bookmark[]>(readBookmarks);
     const [wallpaperUrl, setWallpaperUrl] = useState(customWallpaperPath);
 
     useEffect(() => {
         const img = new Image();
-        img.onload = () => setWallpaperUrl(customWallpaperPath);
-        img.onerror = () => setWallpaperUrl(fallbackWallpaper.default || fallbackWallpaper);
+        img.onload = (): void => setWallpaperUrl(customWallpaperPath);
+        img.onerror = (): void => setWallpaperUrl(fallbackWallpaper.default || fallbackWallpaper);
         img.src = customWallpaperPath;
     }, []);
 
-    useEffect(() => {
-        localStorage.setItem(BOOKMARK_KEY, JSON.stringify(bookmarks.slice(0, 18)));
-    }, [bookmarks]);
-
-    const toUrl = (value: string) => {
+    const toUrl = (value: string): string => {
         const query = value.trim();
         if (!query) return '';
         if (query.match(/^https?:\/\//)) return query;
@@ -46,7 +33,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
         return `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
     };
 
-    const handleSearch = (e: React.FormEvent) => {
+    const handleSearch = (e: React.FormEvent): void => {
         e.preventDefault();
         const url = toUrl(searchQuery);
         if (!url) return;
@@ -62,23 +49,20 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
         { label: 'Proton', url: 'https://mail.proton.me' },
     ], []);
 
-    const handleOpen = (url: string) => {
+    const handleOpen = (url: string): void => {
         if (onNavigate) onNavigate(url);
         else window.electronAPI?.navigateTo?.(url);
     };
 
-    const addBookmarkFromInput = () => {
+    const addBookmarkFromInput = (): void => {
         const url = toUrl(searchQuery);
         if (!url) return;
         const hostname = new URL(url).hostname.replace(/^www\./, '');
-        setBookmarks(prev => [
+        const existing = JSON.parse(localStorage.getItem(BOOKMARK_KEY) || '[]');
+        localStorage.setItem(BOOKMARK_KEY, JSON.stringify([
             { id: `${Date.now()}`, title: hostname, url, createdAt: Date.now() },
-            ...prev.filter(item => item.url !== url)
-        ].slice(0, 18));
-    };
-
-    const removeBookmark = (id: string) => {
-        setBookmarks(prev => prev.filter(item => item.id !== id));
+            ...existing.filter((item: { url: string }) => item.url !== url)
+        ].slice(0, 40)));
     };
 
     return (
@@ -119,29 +103,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
                         );
                     })}
                 </div>
-
-                <section className="bookmarks-panel" aria-label="Bookmarks">
-                    <header>
-                        <span>Bookmarks</span>
-                        <small>{bookmarks.length ? 'saved locally' : 'type an address, then tap the bookmark icon'}</small>
-                    </header>
-                    <div className="bookmark-grid">
-                        {bookmarks.map(bookmark => {
-                            const favicon = getFaviconUrl(bookmark.url);
-                            return (
-                                <div className="bookmark-card" key={bookmark.id}>
-                                    <button className="bookmark-main" onClick={() => handleOpen(bookmark.url)} title={bookmark.url}>
-                                        {favicon ? <img src={favicon} alt="" /> : <Newspaper size={16} />}
-                                        <span>{bookmark.title}</span>
-                                    </button>
-                                    <button className="bookmark-remove" onClick={() => removeBookmark(bookmark.id)} title="Remove bookmark">
-                                        <Trash2 size={13} />
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </section>
             </main>
         </div>
     );
