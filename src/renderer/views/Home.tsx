@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './Home.css';
-import { Search, Github, MessageSquare, Mail, Video, Newspaper, Settings, BookmarkPlus, Trash2 } from 'lucide-react';
+import { Search, Newspaper, Settings, BookmarkPlus, Trash2 } from 'lucide-react';
 import { Bookmark, getFaviconUrl } from '../types';
 
 const hooIcon = require('../assets/branding/hoo-app-icon.svg');
-const hooWallpaper = require('../assets/branding/hoo-owl-wallpaper.png');
+const fallbackWallpaper = require('../assets/branding/hoo-wallpaper.svg');
+const customWallpaperPath = 'assets/branding/hoo-owl-wallpaper.png';
 
 interface HomeProps {
     onNavigate?: (url: string) => void;
@@ -24,6 +25,14 @@ const readBookmarks = (): Bookmark[] => {
 const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [bookmarks, setBookmarks] = useState<Bookmark[]>(readBookmarks);
+    const [wallpaperUrl, setWallpaperUrl] = useState(customWallpaperPath);
+
+    useEffect(() => {
+        const img = new Image();
+        img.onload = () => setWallpaperUrl(customWallpaperPath);
+        img.onerror = () => setWallpaperUrl(fallbackWallpaper.default || fallbackWallpaper);
+        img.src = customWallpaperPath;
+    }, []);
 
     useEffect(() => {
         localStorage.setItem(BOOKMARK_KEY, JSON.stringify(bookmarks.slice(0, 18)));
@@ -73,7 +82,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
     };
 
     return (
-        <div className="home-container" style={{ backgroundImage: `url(${hooWallpaper.default || hooWallpaper})` }}>
+        <div className="home-container" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
             <div className="home-shade" />
             <button className="home-settings" type="button" onClick={onOpenSettings} aria-label="Open settings">
                 <Settings size={18} />
