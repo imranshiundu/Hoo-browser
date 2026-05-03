@@ -14,8 +14,11 @@
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run build",
     "dist": "npm run build:prod && electron-builder --linux AppImage deb",
+    "dist:linux": "npm run build:prod && electron-builder --linux AppImage deb",
     "dist:appimage": "npm run build:prod && electron-builder --linux AppImage",
-    "dist:deb": "npm run build:prod && electron-builder --linux deb"
+    "dist:deb": "npm run build:prod && electron-builder --linux deb",
+    "dist:win": "npm run build:prod && electron-builder --win nsis portable",
+    "dist:mac": "npm run build:prod && electron-builder --mac dmg zip"
   },
   "keywords": [
     "electron",
@@ -23,6 +26,8 @@
     "privacy",
     "duckduckgo",
     "linux",
+    "windows",
+    "macos",
     "desktop-app",
     "hoo"
   ],
@@ -47,6 +52,27 @@
       "category": "Network",
       "synopsis": "Owl-guided privacy-first desktop browser",
       "description": "Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and a calm owl-guided browsing experience."
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "publisherName": "Imran Shiundu"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Hoo Browser"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
     }
   },
   "devDependencies": {
