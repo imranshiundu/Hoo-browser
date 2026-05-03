@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield, Search, MoreHorizontal } from 'lucide-react';
 
 interface NavigationBarProps {
     tabId: string;
@@ -24,6 +24,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
 }) => {
     const [inputValue, setInputValue] = useState(url);
     const [bookmarksOpen, setBookmarksOpen] = useState(false);
+    const [toolsOpen, setToolsOpen] = useState(false);
     const [bookmarks, setBookmarks] = useState<Array<{ id: string; title: string; url: string }>>([]);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -45,9 +46,20 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         return () => document.removeEventListener('hoo-focus-address', focusAddress);
     }, []);
 
+    useEffect(() => {
+        const closePopovers = (event: MouseEvent): void => {
+            const target = event.target as HTMLElement | null;
+            if (!target?.closest('.nav-menu-wrap')) setBookmarksOpen(false);
+            if (!target?.closest('.tools-menu-wrap')) setToolsOpen(false);
+        };
+        document.addEventListener('mousedown', closePopovers);
+        return () => document.removeEventListener('mousedown', closePopovers);
+    }, []);
+
     const normalizeTarget = (value: string): string => {
         let target = value.trim();
         if (!target) return '';
+        if (/^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(target)) return target;
         if (target.startsWith('!w ')) return `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(target.substring(3))}`;
         if (target.startsWith('!y ')) return `https://www.youtube.com/results?search_query=${encodeURIComponent(target.substring(3))}`;
         if (target.startsWith('!g ')) return `https://www.google.com/search?q=${encodeURIComponent(target.substring(3))}`;
@@ -63,11 +75,17 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         e.preventDefault();
         const target = normalizeTarget(inputValue);
         if (target) onNavigate(target);
+        inputRef.current?.blur();
     };
 
     const bookmarkCurrent = (): void => {
         if (!url || url === 'about:blank') return;
-        const title = new URL(url).hostname.replace(/^www\./, '');
+        let title = url;
+        try {
+            title = new URL(url).hostname.replace(/^www\./, '');
+        } catch {
+            title = url.slice(0, 42);
+        }
         const next = [
             { id: `${Date.now()}`, title, url },
             ...bookmarks.filter(item => item.url !== url)
@@ -77,17 +95,33 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         setBookmarksOpen(true);
     };
 
+    const getHostLabel = (): string => {
+        if (!url || url === 'about:blank') return 'New tab';
+        try {
+            return new URL(url).hostname.replace(/^www\./, '');
+        } catch {
+            if (/^(magnet:|mailto:|tel:|sms:)/i.test(url)) return 'External app';
+            return 'Search';
+        }
+    };
+
+    const isSecure = url.startsWith('https://');
+    const isExternal = /^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(url || inputValue);
+
     return (
         <div className="navigation-bar">
-            <button className="nav-btn" onClick={onBack} title="Back"><ArrowLeft size={17} /></button>
-            <button className="nav-btn" onClick={onForward} title="Forward"><ArrowRight size={17} /></button>
-            <button className="nav-btn" onClick={onReload} title="Reload"><RotateCw size={16} /></button>
-            <button className="nav-btn" onClick={() => onNavigate('about:blank')} title="Home"><Home size={16} /></button>
+            <div className="nav-cluster nav-history-cluster" aria-label="Navigation controls">
+                <button className="nav-btn" onClick={onBack} title="Back"><ArrowLeft size={17} /></button>
+                <button className="nav-btn" onClick={onForward} title="Forward"><ArrowRight size={17} /></button>
+                <button className="nav-btn" onClick={onReload} title="Reload"><RotateCw size={16} /></button>
+                <button className="nav-btn" onClick={() => onNavigate('about:blank')} title="Home"><Home size={16} /></button>
+            </div>
 
-            <form onSubmit={handleSubmit} className="address-form">
-                <span className="security-indicator">
-                    {url.startsWith('https') ? <Lock size={13} /> : <Globe size={13} />}
+            <form onSubmit={handleSubmit} className={`address-form ${isSecure ? 'secure' : ''} ${isExternal ? 'external' : ''}`}>
+                <span className="security-indicator" title={isSecure ? 'Secure connection' : isExternal ? 'External protocol' : 'Search or normal connection'}>
+                    {isSecure ? <Lock size={13} /> : isExternal ? <Globe size={13} /> : <Search size={14} />}
                 </span>
+                <span className="address-host-pill">{getHostLabel()}</span>
                 <input
                     ref={inputRef}
                     type="text"
@@ -95,29 +129,51 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onFocus={(e) => e.target.select()}
-                    placeholder="Search with DuckDuckGo or enter address"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                            setInputValue(url);
+                            inputRef.current?.blur();
+                        }
+                    }}
+                    placeholder="Search or enter address"
+                    spellCheck={false}
                 />
             </form>
 
-            <button className="nav-btn" onClick={bookmarkCurrent} title="Bookmark page"><Star size={16} /></button>
-            <div className="nav-menu-wrap">
-                <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); }} title="Bookmarks"><BookOpen size={16} /></button>
-                {bookmarksOpen && (
-                    <div className="bookmarks-popover">
-                        <strong>Bookmarks</strong>
-                        {bookmarks.length === 0 ? <span className="empty-bookmarks">No saved bookmarks yet.</span> : bookmarks.map(item => (
-                            <button key={item.id} onClick={() => { setBookmarksOpen(false); onNavigate(item.url); }}>
-                                <span>{item.title}</span>
-                                <small>{item.url}</small>
-                            </button>
-                        ))}
-                    </div>
-                )}
+            <div className="nav-cluster nav-actions-cluster" aria-label="Page actions">
+                <button className="nav-btn" onClick={bookmarkCurrent} title="Bookmark page"><Star size={16} /></button>
+                <div className="nav-menu-wrap">
+                    <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); setToolsOpen(false); }} title="Bookmarks"><BookOpen size={16} /></button>
+                    {bookmarksOpen && (
+                        <div className="bookmarks-popover">
+                            <strong>Bookmarks</strong>
+                            {bookmarks.length === 0 ? <span className="empty-bookmarks">No saved bookmarks yet.</span> : bookmarks.map(item => (
+                                <button key={item.id} onClick={() => { setBookmarksOpen(false); onNavigate(item.url); }}>
+                                    <span>{item.title}</span>
+                                    <small>{item.url}</small>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <button className="nav-btn shield-on" title="Hoo Shields active"><Shield size={16} /></button>
             </div>
-            <button className="nav-btn" onClick={() => onNavigate('https://duck.ai/')} title="Duck.ai"><Sparkles size={16} /></button>
-            <button className="nav-btn" title="Downloads"><Download size={16} /></button>
-            <button className="nav-btn shield-on" title="Hoo Shields active"><Shield size={16} /></button>
-            <button className="nav-btn" onClick={onOpenSettings} title="Settings"><Settings size={17} /></button>
+
+            <div className="nav-cluster nav-tools-cluster" aria-label="Tools">
+                <button className="nav-btn optional-tool" onClick={() => onNavigate('https://duck.ai/')} title="Duck.ai"><Sparkles size={16} /></button>
+                <button className="nav-btn optional-tool" title="Downloads"><Download size={16} /></button>
+                <div className="tools-menu-wrap">
+                    <button className="nav-btn" onClick={() => { setToolsOpen(v => !v); setBookmarksOpen(false); }} title="More tools"><MoreHorizontal size={18} /></button>
+                    {toolsOpen && (
+                        <div className="tools-popover">
+                            <button onClick={() => { setToolsOpen(false); onNavigate('https://duck.ai/'); }}><Sparkles size={15} /> Duck.ai</button>
+                            <button onClick={() => setToolsOpen(false)}><Download size={15} /> Downloads</button>
+                            <button onClick={() => { setToolsOpen(false); onOpenSettings?.(); }}><Settings size={15} /> Settings</button>
+                        </div>
+                    )}
+                </div>
+                <button className="nav-btn settings-btn" onClick={onOpenSettings} title="Settings"><Settings size={17} /></button>
+            </div>
         </div>
     );
 };
