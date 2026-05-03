@@ -16,27 +16,27 @@ const App: React.FC = () => {
     const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
     useEffect(() => {
-        const loadInitialData = async () => {
+        const loadInitialData = async (): Promise<void> => {
             if (!window.electronAPI?.getInitialData) return;
             const data: { tabs: Tab[], activeTabId?: string | null } = await window.electronAPI.getInitialData();
             const browserTabs = (data.tabs || []).filter(t => t.type === 'browser');
             setTabs([HOME_TAB, ...browserTabs]);
             setActiveTabId(data.activeTabId && browserTabs.some(t => t.id === data.activeTabId) ? data.activeTabId : 'home');
         };
-        loadInitialData();
+        void loadInitialData();
     }, []);
 
     const activeTab = tabs.find(t => t.id === activeTabId) || HOME_TAB;
 
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
+        const handleKeyDown = (e: KeyboardEvent): void => {
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
                 e.preventDefault();
                 document.dispatchEvent(new CustomEvent('hoo-focus-address'));
             }
             if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') {
                 e.preventDefault();
-                handleCreateTab();
+                void handleCreateTab();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -44,8 +44,8 @@ const App: React.FC = () => {
     });
 
     useEffect(() => {
-        if (!activeTab || activeTab.type !== 'browser') window.electronAPI?.hideBrowserView();
-        else window.electronAPI?.switchTab(activeTab.id);
+        if (!activeTab || activeTab.type !== 'browser') void window.electronAPI?.hideBrowserView();
+        else void window.electronAPI?.switchTab(activeTab.id);
     }, [activeTabId, activeTab]);
 
     useEffect(() => {
@@ -58,14 +58,14 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleCreateTab = async (url: string = 'about:blank') => {
+    const handleCreateTab = async (url: string = 'about:blank'): Promise<void> => {
         if (!window.electronAPI?.createTab) return;
         const tabId = await window.electronAPI.createTab(url);
         setTabs(prev => [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'New Tab', url }]);
         setActiveTabId(tabId);
     };
 
-    const handleNavigateFromHome = async (url: string) => {
+    const handleNavigateFromHome = async (url: string): Promise<void> => {
         if (!window.electronAPI?.navigateTo) return;
         const tabId = await window.electronAPI.navigateTo(url);
         if (!tabId) return;
@@ -73,7 +73,7 @@ const App: React.FC = () => {
         setActiveTabId(tabId);
     };
 
-    const handleSwitchTab = async (tabId: string) => {
+    const handleSwitchTab = async (tabId: string): Promise<void> => {
         if (tabId === activeTabId) return;
         const targetTab = tabs.find(t => t.id === tabId);
         if (targetTab?.type === 'browser') await window.electronAPI?.switchTab(tabId);
@@ -81,7 +81,7 @@ const App: React.FC = () => {
         setSplitTabId(null);
     };
 
-    const handleSplitTab = async (tabId: string) => {
+    const handleSplitTab = async (tabId: string): Promise<void> => {
         if (tabId === activeTabId) return;
         const active = tabs.find(t => t.id === activeTabId);
         const target = tabs.find(t => t.id === tabId);
@@ -92,7 +92,7 @@ const App: React.FC = () => {
         }
     };
 
-    const handleCloseTab = async (tabId: string) => {
+    const handleCloseTab = async (tabId: string): Promise<void> => {
         const targetTab = tabs.find(t => t.id === tabId);
         if (!targetTab || targetTab.type !== 'browser') return;
         await window.electronAPI?.closeTab(tabId);
@@ -114,10 +114,10 @@ const App: React.FC = () => {
                         tabs={browserTabs}
                         activeTabId={activeTabId}
                         splitTabId={splitTabId}
-                        onSwitchTab={handleSwitchTab}
-                        onSplitTab={handleSplitTab}
-                        onCloseTab={handleCloseTab}
-                        onCreateTab={() => handleCreateTab()}
+                        onSwitchTab={(id): void => { void handleSwitchTab(id); }}
+                        onSplitTab={(id): void => { void handleSplitTab(id); }}
+                        onCloseTab={(id): void => { void handleCloseTab(id); }}
+                        onCreateTab={(): void => { void handleCreateTab(); }}
                     />
                 )}
                 <section className="browser-stage">
@@ -128,7 +128,7 @@ const App: React.FC = () => {
                             onSwitchTab={handleSwitchTab}
                             onCloseTab={handleCloseTab}
                             onCreateTab={() => handleCreateTab()}
-                            onUpdateTabs={() => undefined}
+                            onUpdateTabs={(): void => undefined}
                             onOpenSettings={() => setSettingsOpen(true)}
                         />
                     ) : (
