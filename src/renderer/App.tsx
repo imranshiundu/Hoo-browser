@@ -15,6 +15,12 @@ const App: React.FC = () => {
     const [splitTabId, setSplitTabId] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
+    const openHomeTab = (): void => {
+        setTabs(prev => prev.some(t => t.id === 'home') ? prev : [HOME_TAB, ...prev]);
+        setActiveTabId('home');
+        setSplitTabId(null);
+    };
+
     useEffect(() => {
         const loadInitialData = async (): Promise<void> => {
             if (!window.electronAPI?.getInitialData) return;
@@ -69,13 +75,8 @@ const App: React.FC = () => {
                 : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
             setActiveTabId(tabId);
         });
+        window.electronAPI?.onSwitchToHome?.(() => openHomeTab());
     }, []);
-
-    const openHomeTab = (): void => {
-        setTabs(prev => prev.some(t => t.id === 'home') ? prev : [HOME_TAB, ...prev]);
-        setActiveTabId('home');
-        setSplitTabId(null);
-    };
 
     const handleNavigateFromHome = async (url: string): Promise<void> => {
         if (!window.electronAPI?.navigateTo) return;
