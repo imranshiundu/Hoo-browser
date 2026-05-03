@@ -5,8 +5,8 @@
     overflow-y: auto;
     padding: 30px 34px;
     background:
-        radial-gradient(circle at 10% 0%, rgba(222, 88, 51, 0.09), transparent 28%),
-        radial-gradient(circle at 90% 0%, rgba(34, 197, 94, 0.08), transparent 30%),
+        radial-gradient(circle at 10% 0%, rgba(255, 106, 0, 0.11), transparent 28%),
+        radial-gradient(circle at 90% 0%, rgba(61, 187, 120, 0.09), transparent 30%),
         var(--bg-primary);
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
@@ -26,14 +26,14 @@
 }
 
 .giant-shield {
-    color: #de5833;
-    filter: drop-shadow(0 0 34px rgba(222, 88, 51, 0.28));
+    color: #FF6A00;
+    filter: drop-shadow(0 0 34px rgba(255, 106, 0, 0.28));
 }
 
 .shield-glow {
     position: absolute;
     inset: -22px;
-    background: radial-gradient(circle, rgba(222, 88, 51, 0.12) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255, 106, 0, 0.12) 0%, transparent 70%);
     border-radius: 50%;
     pointer-events: none;
 }
@@ -41,14 +41,14 @@
 .eyebrow {
     margin: 0 0 8px;
     font-size: 10px;
-    color: var(--text-muted);
+    color: #8EB876;
     letter-spacing: 2px;
     text-transform: uppercase;
     font-weight: 800;
 }
 
 .privacy-title {
-    max-width: 680px;
+    max-width: 760px;
     font-size: clamp(28px, 4vw, 48px);
     line-height: 1;
     letter-spacing: -1.8px;
@@ -64,7 +64,7 @@
 }
 
 .saved-badge {
-    color: #4ade80;
+    color: #3DBB78;
     font-weight: 700;
 }
 
@@ -84,9 +84,9 @@
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.7px;
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.26);
-    color: #4ade80;
+    background: rgba(61, 187, 120, 0.1);
+    border: 1px solid rgba(61, 187, 120, 0.26);
+    color: #3DBB78;
 }
 
 .security-badge.partial {
@@ -95,6 +95,7 @@
     color: #fbbf24;
 }
 
+.update-card,
 .encryption-card {
     display: flex;
     gap: 16px;
@@ -104,13 +105,85 @@
     margin: 0 auto 14px;
     padding: 18px;
     border-radius: 18px;
-    background: rgba(222, 88, 51, 0.08);
-    border: 1px solid rgba(222, 88, 51, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.update-card {
+    align-items: center;
+    background:
+        linear-gradient(135deg, rgba(255, 106, 0, 0.11), rgba(61, 187, 120, 0.06)),
+        rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 106, 0, 0.2);
+}
+
+.update-info {
+    flex: 1;
+}
+
+.update-icon,
 .encryption-icon {
-    color: #de5833;
-    background: rgba(222, 88, 51, 0.1);
+    color: #FF6A00;
+    background: rgba(255, 106, 0, 0.1);
+}
+
+.update-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 170px;
+    border: 0;
+    border-radius: 14px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #FF6A00, #ff8a2a);
+    color: #F2F2EF;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 14px 35px rgba(255, 106, 0, 0.18);
+    transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.update-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.update-button:disabled {
+    opacity: 0.72;
+    cursor: wait;
+}
+
+.spinning {
+    animation: hoo-spin 0.9s linear infinite;
+}
+
+@keyframes hoo-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.update-result {
+    margin: 10px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    font-weight: 650;
+}
+
+.update-result.ok {
+    color: #3DBB78;
+}
+
+.update-result.bad {
+    color: #fbbf24;
+}
+
+.update-result span {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    word-break: break-word;
 }
 
 .privacy-modules {
@@ -139,7 +212,7 @@
 }
 
 .privacy-module.on {
-    border-color: rgba(34, 197, 94, 0.13);
+    border-color: rgba(61, 187, 120, 0.13);
 }
 
 .privacy-module.off {
@@ -184,8 +257,8 @@
 }
 
 .mod-status.active {
-    background: rgba(34, 197, 94, 0.12);
-    color: #4ade80;
+    background: rgba(61, 187, 120, 0.12);
+    color: #3DBB78;
 }
 
 .mod-status.inactive {
@@ -235,7 +308,7 @@
 }
 
 .toggle-switch input:checked+.toggle-slider {
-    background: linear-gradient(135deg, #22c55e, #16a34a);
+    background: linear-gradient(135deg, #3DBB78, #229e5d);
 }
 
 .toggle-switch input:checked+.toggle-slider::before {
@@ -275,6 +348,17 @@
 }
 
 .privacy-note svg {
-    color: #de5833;
+    color: #FF6A00;
     flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+    .update-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .update-button {
+        width: 100%;
+    }
 }
