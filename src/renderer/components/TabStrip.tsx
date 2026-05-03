@@ -1,7 +1,7 @@
 import React from 'react';
 import './TabStrip.css';
 import { X, Plus, Globe, Columns } from 'lucide-react';
-import { Tab } from '../types';
+import { Tab, getFaviconUrl } from '../types';
 
 interface TabStripProps {
     tabs: Tab[];
@@ -27,6 +27,7 @@ const TabStrip: React.FC<TabStripProps> = ({
 
     const startEditing = (e: React.MouseEvent, tab: Tab) => {
         e.stopPropagation();
+        if (tab.id === 'home') return;
         setEditingId(tab.id);
         setEditValue(tab.title);
     };
@@ -41,59 +42,69 @@ const TabStrip: React.FC<TabStripProps> = ({
     return (
         <div className="tab-strip">
             <div className="tabs-container">
-                {tabs.map(tab => (
-                    <div
-                        key={tab.id}
-                        className={`tab-item ${tab.id === activeTabId ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''}`}
-                        onClick={() => onSwitchTab(tab.id)}
-                        onDoubleClick={(e) => startEditing(e, tab)}
-                    >
-                        <Globe size={14} className="tab-favicon" />
-
-                        {editingId === tab.id ? (
-                            <input
-                                className="tab-rename-input"
-                                autoFocus
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onBlur={() => submitRename(tab.id)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') submitRename(tab.id);
-                                    if (e.key === 'Escape') setEditingId(null);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        ) : (
-                            <span className="tab-title" title="Double click to rename">{tab.title}</span>
-                        )}
-
-                        <div className="tab-actions">
-                            {tab.id !== activeTabId && tab.id !== splitTabId && (
-                                <button
-                                    className="tab-action-btn split-btn"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onSplitTab(tab.id);
-                                    }}
-                                    title="Open in Split View"
-                                >
-                                    <Columns size={12} />
-                                </button>
+                {tabs.map(tab => {
+                    const faviconUrl = getFaviconUrl(tab.url);
+                    return (
+                        <div
+                            key={tab.id}
+                            className={`tab-item ${tab.id === activeTabId ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''}`}
+                            onClick={() => onSwitchTab(tab.id)}
+                            onDoubleClick={(e) => startEditing(e, tab)}
+                        >
+                            {faviconUrl ? (
+                                <img className="tab-favicon-img" src={faviconUrl} alt="" draggable={false} />
+                            ) : (
+                                <Globe size={14} className="tab-favicon" />
                             )}
-                            <button
-                                className="tab-action-btn close-btn"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onCloseTab(tab.id);
-                                }}
-                            >
-                                <X size={12} />
-                            </button>
+
+                            {editingId === tab.id ? (
+                                <input
+                                    className="tab-rename-input"
+                                    autoFocus
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onBlur={() => submitRename(tab.id)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') submitRename(tab.id);
+                                        if (e.key === 'Escape') setEditingId(null);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                            ) : (
+                                <span className="tab-title" title={tab.title}>{tab.title}</span>
+                            )}
+
+                            <div className="tab-actions">
+                                {tab.type === 'browser' && tab.id !== activeTabId && tab.id !== splitTabId && (
+                                    <button
+                                        className="tab-action-btn split-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSplitTab(tab.id);
+                                        }}
+                                        title="Open in Split View"
+                                    >
+                                        <Columns size={12} />
+                                    </button>
+                                )}
+                                {tab.type === 'browser' && (
+                                    <button
+                                        className="tab-action-btn close-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onCloseTab(tab.id);
+                                        }}
+                                        title="Close tab"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
-            <button className="new-tab-btn" onClick={onCreateTab}>
+            <button className="new-tab-btn" onClick={onCreateTab} title="New tab">
                 <Plus size={16} />
             </button>
         </div>
