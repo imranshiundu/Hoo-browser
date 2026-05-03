@@ -1,5 +1,4 @@
-// Fast, Brave-style blocking without breaking heavy web apps.
-// The goal is to cut ad/tracker/cookie junk while avoiding the old skeleton-screen bug.
+// Lightweight request hygiene for Hoo. Keep this conservative so big sites do not break.
 
 export const adBlockRules = [
     'doubleclick.net',
@@ -54,7 +53,7 @@ export const trackerBlockRules = [
 ];
 
 const adBlockSet = new Set(adBlockRules);
-const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com'];
+const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com', 'accounts.google.com'];
 
 function hostMatches(hostname: string, rule: string): boolean {
     return hostname === rule || hostname.endsWith(`.${rule}`);
@@ -69,9 +68,10 @@ function isSafeHeavyHost(url: string): boolean {
     }
 }
 
-export function shouldBlockRequest(url: string): boolean {
+export function shouldBlockRequest(url: string, resourceType?: string): boolean {
     const urlLower = url.toLowerCase();
     if (isSafeHeavyHost(urlLower)) return false;
+    if (resourceType === 'beacon' || resourceType === 'ping') return true;
 
     try {
         const parsedUrl = new URL(urlLower);
@@ -79,21 +79,17 @@ export function shouldBlockRequest(url: string): boolean {
         for (const domain of adBlockSet) {
             if (hostMatches(host, domain)) return true;
         }
-    } catch (e) {
+    } catch {
         for (const domain of adBlockRules) {
             if (urlLower.includes(domain)) return true;
         }
     }
 
-    for (const pattern of trackerBlockRules) {
-        if (urlLower.includes(pattern)) return true;
-    }
-
-    return false;
+    return trackerBlockRules.some(pattern => urlLower.includes(pattern));
 }
 
 export function isThirdPartyRequest(resourceUrl: string, pageUrl?: string): boolean {
-    if (!pageUrl) return false;
+    if (!pageUrl || pageUrl.startsWith('about:')) return false;
     try {
         const resourceHost = new URL(resourceUrl).hostname.replace(/^www\./, '');
         const pageHost = new URL(pageUrl).hostname.replace(/^www\./, '');
@@ -103,20 +99,36 @@ export function isThirdPartyRequest(resourceUrl: string, pageUrl?: string): bool
     }
 }
 
-export function stripJunkRequestHeaders(headers: Record<string, string | string[] | undefined>, resourceUrl: string, pageUrl?: string) {
-    const next = { ...headers };
+function flattenHeaderValue(value: string | string[] | undefined): string | undefined {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.join('; ');
+    return undefined;
+}
+
+export function stripJunkRequestHeaders(headers: Record<string, string | string[] | undefined>, resourceUrl: string, pageUrl?: string): Record<string, string> {
+    const next: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers || {})) {
+        const flat = flattenHeaderValue(value);
+        if (flat !== undefined) next[key] = flat;
+    }
+
     if (isThirdPartyRequest(resourceUrl, pageUrl)) {
         delete next.Cookie;
         delete next.cookie;
+        delete next.Referer;
+        delete next.referer;
     }
     delete next['X-Client-Data'];
     delete next['x-client-data'];
     return next;
 }
 
-export function stripJunkResponseHeaders(headers: Record<string, string[] | undefined> | undefined, resourceUrl: string, pageUrl?: string) {
+export function stripJunkResponseHeaders(headers: Record<string, string | string[] | undefined> | undefined, resourceUrl: string, pageUrl?: string): Record<string, string | string[]> | undefined {
     if (!headers) return headers;
-    const next = { ...headers };
+    const next: Record<string, string | string[]> = {};
+    for (const [key, value] of Object.entries(headers)) {
+        if (typeof value === 'string' || Array.isArray(value)) next[key] = value;
+    }
     if (isThirdPartyRequest(resourceUrl, pageUrl)) {
         delete next['set-cookie'];
         delete next['Set-Cookie'];
