@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getInitialData: () => ipcRenderer.invoke('get-initial-data'),
     getSystemMetrics: () => ipcRenderer.invoke('get-system-metrics'),
     nuclearWipe: () => ipcRenderer.invoke('nuclear-wipe'),
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
 
     // Sidebar
     toggleSidebar: (collapsed: boolean) => ipcRenderer.invoke('toggle-sidebar', collapsed),
