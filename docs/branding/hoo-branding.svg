@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 520" role="img" aria-label="Hoo Browser brand banner">
+  <defs>
+    <radialGradient id="bg" cx="35%" cy="30%" r="90%"><stop offset="0" stop-color="#172126"/><stop offset="1" stop-color="#0E1111"/></radialGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF8A19"/><stop offset="1" stop-color="#FF6A00"/></linearGradient>
+  </defs>
+  <rect width="1600" height="520" rx="36" fill="url(#bg)"/>
+  <g transform="translate(110 93) scale(.72)">
+    <rect width="430" height="430" rx="96" fill="#171B1D"/>
+    <circle cx="215" cy="215" r="145" fill="#202426"/>
+    <path d="M62 85c56 10 100 34 135 73-62-5-107-30-135-73Z" fill="url(#orange)"/>
+    <path d="M368 85c-56 10-100 34-135 73 62-5 107-30 135-73Z" fill="url(#orange)"/>
+    <circle cx="164" cy="194" r="55" fill="#F2F2EF"/><circle cx="266" cy="194" r="55" fill="#F2F2EF"/>
+    <circle cx="164" cy="194" r="34" fill="#FF6A00"/><circle cx="266" cy="194" r="34" fill="#FF6A00"/>
+    <circle cx="164" cy="194" r="25" fill="#101415"/><circle cx="266" cy="194" r="25" fill="#101415"/>
+    <circle cx="153" cy="182" r="8" fill="#fff"/><circle cx="255" cy="182" r="8" fill="#fff"/>
+    <path d="M215 213l-20 30c13 10 27 10 40 0l-20-30Z" fill="url(#orange)"/>
+    <path d="M150 124c30 12 50 26 65 44 15-18 35-32 65-44-8 33-28 58-65 76-37-18-57-43-65-76Z" fill="url(#orange)"/>
+    <path d="M145 295c47 32 93 32 140 0-9 42-35 70-70 70s-61-28-70-70Z" fill="#F2F2EF" opacity=".16"/>
+  </g>
+  <text x="455" y="220" fill="#F2F2EF" font-family="Inter, Arial, sans-serif" font-size="106" font-weight="800" letter-spacing="-5">Hoo</text>
+  <text x="680" y="220" fill="#F2F2EF" opacity=".86" font-family="Inter, Arial, sans-serif" font-size="96" font-weight="300" letter-spacing="-5">Browser</text>
+  <text x="460" y="300" fill="#8EB876" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800" letter-spacing="13">OWL-GUIDED. PRIVACY-FIRST. WEB FREEDOM.</text>
+  <text x="460" y="370" fill="#B8BEC3" font-family="Inter, Arial, sans-serif" font-size="29">DuckDuckGo-first desktop browser with isolated web apps, practical protection,</text>
+  <text x="460" y="410" fill="#B8BEC3" font-family="Inter, Arial, sans-serif" font-size="29">and a calm owl-guided experience for Linux and beyond.</text>
+</svg>
