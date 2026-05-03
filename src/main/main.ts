@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
 import { exec } from "child_process";
-import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl } from "./privacy-filters";
+import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders } from "./privacy-filters";
 import { StorageService } from "./storage";
 import { setupAuthHandlers } from "./auth";
 import { MegaSyncService } from "./sync";
@@ -43,7 +43,7 @@ let privacySettings = {
 
 const WHATSAPP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) WhatsApp/2.24.4.78 Chrome/120.0.6099.225 Electron/30.0.0 Safari/537.36";
 
-function resolveAssetPath(...segments: string[]) {
+function resolveAssetPath(...segments: string[]): string {
     const distAsset = path.join(__dirname, "../renderer", ...segments);
     if (fs.existsSync(distAsset)) return distAsset;
     const sourceAsset = path.join(__dirname, "../../src/renderer", ...segments);
@@ -55,20 +55,43 @@ function getUrlForHeaders(detailsUrl: string, fallbackContents?: Electron.WebCon
     return detailsUrl || fallbackContents?.getURL() || '';
 }
 
-function attachViewHandlers(tabId: string, view: BrowserView) {
+function getPageUrlForRequest(details: Electron.OnBeforeSendHeadersListenerDetails | Electron.OnHeadersReceivedListenerDetails): string {
+    return details.webContents?.getURL?.() || details.referrer || '';
+}
+
+function injectSitePolish(view: BrowserView): void {
+    view.webContents.insertCSS(`
+        html, body { scrollbar-width: thin !important; }
+        ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
+        ::-webkit-scrollbar-track { background: transparent !important; }
+        ::-webkit-scrollbar-thumb { background: rgba(140,140,140,.28) !important; border-radius: 999px !important; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(180,180,180,.42) !important; }
+        @-moz-document url-prefix("https://duckduckgo.com") {
+            form[role="search"], [data-testid="searchbox"], .searchbox_searchbox__eaWKL { max-width: 820px !important; }
+        }
+        body:has(input[name="q"]) form[role="search"],
+        body:has(input[name="q"]) [data-testid="searchbox"],
+        body:has(input[name="q"]) .searchbox_searchbox__eaWKL {
+            max-width: 820px !important;
+        }
+    `).catch(() => undefined);
+}
+
+function attachViewHandlers(tabId: string, view: BrowserView): void {
     view.setAutoResize({ width: true, height: true });
     view.webContents.setBackgroundThrottling(false);
 
-    view.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    view.webContents.session.setPermissionRequestHandler((webContents, permission, callback): void => {
         const url = webContents.getURL();
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com') && permission === 'media') {
             console.log(`[DeepSpoof] Auto-granting media to WhatsApp`);
-            return callback(true);
+            callback(true);
+            return;
         }
         callback(false);
     });
 
-    view.webContents.on('did-start-navigation', (_event, url) => {
+    view.webContents.on('did-start-navigation', (_event, url): void => {
         mainWindow?.webContents.send('tab-loading-state', tabId, true, url);
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com')) {
             view.webContents.setUserAgent(WHATSAPP_UA);
@@ -82,19 +105,20 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
         }
     });
 
-    view.webContents.on('did-finish-load', () => {
+    view.webContents.on('did-finish-load', (): void => {
+        injectSitePolish(view);
         const title = view.webContents.getTitle();
         const url = view.webContents.getURL();
         mainWindow?.webContents.send('tab-loading-state', tabId, false, url);
         if (title) mainWindow?.webContents.send('tab-title-updated', tabId, title, url);
     });
 
-    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL): void => {
         mainWindow?.webContents.send('tab-loading-state', tabId, false, validatedURL);
         mainWindow?.webContents.send('tab-load-error', tabId, errorCode, errorDescription, validatedURL);
     });
 
-    view.webContents.on('page-title-updated', (_event, title) => {
+    view.webContents.on('page-title-updated', (_event, title): void => {
         const url = view.webContents.getURL();
         mainWindow?.webContents.send('tab-title-updated', tabId, title, url);
 
@@ -108,12 +132,12 @@ function attachViewHandlers(tabId: string, view: BrowserView) {
     });
 }
 
-function restoreTabs() {
+function restoreTabs(): void {
     if (!persistentData.tabs) return;
     const tabs = [...persistentData.tabs].sort((a: any, b: any) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
     const activeRestoreId = persistentData.activeTabId || tabs.find((tab: any) => tab.type === 'browser')?.id;
 
-    tabs.forEach((tab: any) => {
+    tabs.forEach((tab: any): void => {
         if (tab.type !== 'browser' || tab.id !== activeRestoreId) return;
         const view = new BrowserView({
             webPreferences: {
@@ -131,7 +155,7 @@ function restoreTabs() {
     });
 }
 
-function createWindow() {
+function createWindow(): void {
     mainWindow = new BrowserWindow({
         height: 800,
         width: 1400,
@@ -148,6 +172,7 @@ function createWindow() {
             backgroundThrottling: false,
         },
     });
+    mainWindow.setMaxListeners(40);
 
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
     mainWindow.once('ready-to-show', markWindowReady);
@@ -157,7 +182,7 @@ function createWindow() {
     setupAuthHandlers(mainWindow);
     restoreTabs();
 
-    mainWindow.on("closed", () => {
+    mainWindow.on("closed", (): void => {
         mainWindow = null;
         browserViews.forEach(view => {
             if (!view.webContents.isDestroyed()) view.webContents.close();
@@ -165,7 +190,7 @@ function createWindow() {
         browserViews.clear();
     });
 
-    const triggerResize = () => {
+    const triggerResize = (): void => {
         if (activeTabId) updateBrowserViewBounds();
     };
     mainWindow.on('resize', triggerResize);
@@ -207,10 +232,10 @@ ipcMain.handle('get-performance-snapshot', async () => getPerformanceSnapshot({
     aiLoaded: openClawLoaded
 }));
 
-function applyPrivacyToSession(ses: Electron.Session) {
+function applyPrivacyToSession(ses: Electron.Session): void {
     const filter = { urls: ['<all_urls>'] };
 
-    ses.webRequest.onBeforeRequest(filter, (details, callback) => {
+    ses.webRequest.onBeforeRequest(filter, (details, callback): void => {
         trackNetworkRequest();
         const lowDataDecision = shouldBlockForLowData(details.url, details.resourceType, privacySettings);
         if (lowDataDecision.block) return callback({ cancel: true });
@@ -219,15 +244,16 @@ function applyPrivacyToSession(ses: Electron.Session) {
         callback({ cancel: false });
     });
 
-    ses.webRequest.onHeadersReceived(filter, (details, callback) => {
+    ses.webRequest.onHeadersReceived(filter, (details, callback): void => {
         const lengthHeader = details.responseHeaders?.['content-length'] || details.responseHeaders?.['Content-Length'];
         const lengthValue = Array.isArray(lengthHeader) ? Number(lengthHeader[0]) : Number(lengthHeader);
         trackNetworkBytes(lengthValue);
-        callback({ responseHeaders: details.responseHeaders });
+        callback({ responseHeaders: stripJunkResponseHeaders(details.responseHeaders, details.url, getPageUrlForRequest(details)) });
     });
 
-    ses.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
+    ses.webRequest.onBeforeSendHeaders(filter, (details, callback): void => {
         const targetUrl = getUrlForHeaders(details.url);
+        details.requestHeaders = stripJunkRequestHeaders(details.requestHeaders, details.url, getPageUrlForRequest(details));
         if (privacySettings.deepSpoof && targetUrl.includes('web.whatsapp.com')) {
             details.requestHeaders['User-Agent'] = WHATSAPP_UA;
         } else {
@@ -237,45 +263,20 @@ function applyPrivacyToSession(ses: Electron.Session) {
     });
 }
 
-function setupPrivacyFilters() {
+function setupPrivacyFilters(): void {
     applyPrivacyToSession(session.defaultSession);
 }
 
-function raiseBrowserViews() {
-    if (!mainWindow) return;
-    if (activeTabId) {
-        const activeView = browserViews.get(activeTabId);
-        if (activeView) {
-            mainWindow.removeBrowserView(activeView);
-            mainWindow.addBrowserView(activeView);
-        }
-    }
-    if (splitTabId) {
-        const splitView = browserViews.get(splitTabId);
-        if (splitView) {
-            mainWindow.removeBrowserView(splitView);
-            mainWindow.addBrowserView(splitView);
-        }
-    }
-}
-
-function updateBrowserViewBounds() {
+function updateBrowserViewBounds(): void {
     if (!mainWindow || !activeTabId) return;
     const content = mainWindow.getContentBounds();
-    const bounds = manualBounds || {
-        x: 0,
-        y: 118,
-        width: content.width,
-        height: Math.max(100, content.height - 118)
-    };
-
+    const bounds = manualBounds || { x: 0, y: 118, width: content.width, height: Math.max(100, content.height - 118) };
     const safeBounds = {
         x: Math.max(0, Math.floor(bounds.x)),
         y: Math.max(0, Math.floor(bounds.y)),
         width: Math.max(100, Math.floor(bounds.width)),
         height: Math.max(100, Math.floor(bounds.height))
     };
-
     if (activeTabId && splitTabId) {
         const view1 = browserViews.get(activeTabId);
         const view2 = browserViews.get(splitTabId);
@@ -286,11 +287,9 @@ function updateBrowserViewBounds() {
         const view = browserViews.get(activeTabId);
         if (view) view.setBounds(safeBounds);
     }
-
-    raiseBrowserViews();
 }
 
-function showBrowserView(tabId: string, isSplit = false) {
+function showBrowserView(tabId: string, isSplit = false): void {
     if (!mainWindow) return;
     if (isSplit) splitTabId = tabId;
     else {
@@ -342,7 +341,7 @@ ipcMain.handle('get-initial-data', async () => {
     return { tabs: data.tabs, history: data.history, downloads: data.downloads, crashedTabs: data.crashedTabs, settings: privacySettings, activeTabId: data.activeTabId };
 });
 
-function createBrowserViewForTab(tabId: string, partition?: string) {
+function createBrowserViewForTab(tabId: string, partition?: string): BrowserView {
     const view = new BrowserView({ webPreferences: { nodeIntegration: false, contextIsolation: true, partition: partition ? `persist:${partition}` : undefined, sandbox: true, backgroundThrottling: false } });
     browserViews.set(tabId, view);
     applyPrivacyToSession(view.webContents.session);
