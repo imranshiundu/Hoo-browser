@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
-import { Activity, Shield, Clock, Plus, Edit3, Terminal, Cpu, Globe } from 'lucide-react';
+import { Shield, Globe } from 'lucide-react';
 
 interface MostVisitedSite {
     icon: string;
@@ -13,22 +13,24 @@ const Dashboard: React.FC = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [scratchpadText, setScratchpadText] = useState('');
     const [ramUsage, setRamUsage] = useState({ used: '0', total: '0' });
+    const [hooMemoryMb, setHooMemoryMb] = useState(0);
     const [cpuUsage, setCpuUsage] = useState(0);
     const [storageUsage, setStorageUsage] = useState({ usedText: '0 MB', usedBytes: 0 });
-    const [trackersBlocked, setTrackersBlocked] = useState(1240);
+    const [trackersBlocked] = useState(1240);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
 
-        // Poll for system metrics
         const fetchMetrics = async () => {
             if (window.electronAPI?.getSystemMetrics) {
                 const metrics = await window.electronAPI.getSystemMetrics();
                 setCpuUsage(metrics.cpu);
-                setRamUsage(metrics.ram);
+                setRamUsage({ used: metrics.memory.usedGb, total: metrics.memory.totalGb });
+                setHooMemoryMb(metrics.memory.processMb);
                 setStorageUsage(metrics.storage);
             }
         };
+
         fetchMetrics();
         const metricsTimer = setInterval(fetchMetrics, 3000);
 
@@ -47,24 +49,24 @@ const Dashboard: React.FC = () => {
 
     const mostVisitedSites: MostVisitedSite[] = [
         { icon: 'github', name: 'GitHub', url: 'github.com', color: '#333' },
-        { icon: 'reddit', name: 'Reddit', url: 'reddit.com', color: '#FF4500' },
+        { icon: 'duckduckgo', name: 'DuckDuckGo', url: 'duckduckgo.com', color: '#FF6A00' },
         { icon: 'proton', name: 'Proton', url: 'proton.me', color: '#6d4aff' },
-        { icon: 'discord', name: 'Discord', url: 'discord.com', color: '#5865F2' },
+        { icon: 'whatsapp', name: 'WhatsApp', url: 'web.whatsapp.com', color: '#25d366' },
     ];
 
-    const formatDate = () => {
-        return currentTime.toLocaleDateString('en-US', {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-        });
-    };
+    const formatDate = () => currentTime.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+    });
+
+    const memoryPercent = ramUsage.total === '0' ? 0 : Math.min(100, (parseFloat(ramUsage.used) / parseFloat(ramUsage.total)) * 100);
 
     return (
         <div className="dashboard-container">
             <div className="dashboard-header">
                 <div className="header-left">
-                    <p className="dashboard-subtitle">ZEN BROWSER / SECURITY HUD</p>
+                    <p className="dashboard-subtitle">HOO BROWSER / LIGHTWEIGHT HUD</p>
                     <h1 className="dashboard-title">System Overview</h1>
                 </div>
                 <div className="header-right">
@@ -76,11 +78,7 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="dashboard-search">
-                <input
-                    type="text"
-                    placeholder="Search or execute secure command..."
-                    className="dashboard-search-input"
-                />
+                <input type="text" placeholder="Search privately with DuckDuckGo..." className="dashboard-search-input" />
             </div>
 
             <div className="widgets-grid">
@@ -88,50 +86,42 @@ const Dashboard: React.FC = () => {
                     <h3 className="widget-title">Engine Metrics</h3>
                     <div className="widget-content">
                         <div className="status-item">
-                            <div className="status-label">Memory</div>
+                            <div className="status-label">System Memory</div>
                             <div className="status-value">
                                 {ramUsage.used === '0' ? '---' : ramUsage.used} <span className="status-unit">GB / {ramUsage.total}GB</span>
                             </div>
-                            <div className="status-bar">
-                                <div
-                                    className="status-bar-fill optimal"
-                                    style={{ width: `${ramUsage.total === '0' ? 0 : (parseFloat(ramUsage.used) / parseFloat(ramUsage.total)) * 100}%` }}
-                                ></div>
-                            </div>
+                            <div className="status-bar"><div className="status-bar-fill optimal" style={{ width: `${memoryPercent}%` }} /></div>
                         </div>
 
                         <div className="status-item">
-                            <div className="status-label">Sandbox Integrity</div>
+                            <div className="status-label">Hoo Process Memory</div>
                             <div className="status-value">
-                                {storageUsage.usedText} <span className="status-unit">/ 8.00 GB</span>
+                                {hooMemoryMb ? hooMemoryMb : '---'} <span className="status-unit">MB</span>
+                            </div>
+                            <div className="status-bar"><div className="status-bar-fill optimal" style={{ width: `${Math.min(100, (hooMemoryMb / 500) * 100)}%` }} /></div>
+                        </div>
+
+                        <div className="status-item">
+                            <div className="status-label">Profile Storage</div>
+                            <div className="status-value">
+                                {storageUsage.usedText} <span className="status-unit">local</span>
                             </div>
                             <div className="status-bar">
-                                <div
-                                    className="status-bar-fill"
-                                    style={{
-                                        width: `${(storageUsage.usedBytes / (8 * 1024 ** 3)) * 100}%`,
-                                        background: 'rgba(255,255,255,0.1)'
-                                    }}
-                                ></div>
+                                <div className="status-bar-fill" style={{ width: `${Math.min(100, (storageUsage.usedBytes / (8 * 1024 ** 3)) * 100)}%`, background: 'rgba(255,255,255,0.1)' }} />
                             </div>
                         </div>
 
                         <div className="status-item">
-                            <div className="status-label">Mitigated Threats</div>
-                            <div className="status-value large">{trackersBlocked.toLocaleString()}</div>
+                            <div className="status-label">CPU Estimate</div>
+                            <div className="status-value large">{cpuUsage}%</div>
                         </div>
                     </div>
                 </div>
 
                 <div className="widget">
-                    <h3 className="widget-title">Secure Vault</h3>
+                    <h3 className="widget-title">Secure Notes</h3>
                     <div className="widget-content">
-                        <textarea
-                            className="scratchpad-textarea"
-                            placeholder="Type to save encrypted notes..."
-                            value={scratchpadText}
-                            onChange={(e) => setScratchpadText(e.target.value)}
-                        />
+                        <textarea className="scratchpad-textarea" placeholder="Type local notes..." value={scratchpadText} onChange={(e) => setScratchpadText(e.target.value)} />
                     </div>
                 </div>
 
@@ -140,19 +130,22 @@ const Dashboard: React.FC = () => {
                     <div className="widget-content">
                         <div className="most-visited-grid">
                             {mostVisitedSites.map((site, index) => (
-                                <button
-                                    key={index}
-                                    className="most-visited-card"
-                                    onClick={() => {
-                                        if (window.electronAPI?.navigateTo) {
-                                            window.electronAPI.navigateTo(`https://${site.url}`);
-                                        }
-                                    }}
-                                >
+                                <button key={index} className="most-visited-card" onClick={() => window.electronAPI?.navigateTo?.(`https://${site.url}`)}>
                                     <Globe size={20} style={{ opacity: 0.5 }} />
                                     <div className="site-name">{site.name}</div>
                                 </button>
                             ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="widget">
+                    <h3 className="widget-title">Shield Status</h3>
+                    <div className="widget-content">
+                        <div className="status-item">
+                            <Shield size={28} />
+                            <div className="status-label">Blocked Estimate</div>
+                            <div className="status-value large">{trackersBlocked.toLocaleString()}</div>
                         </div>
                     </div>
                 </div>
