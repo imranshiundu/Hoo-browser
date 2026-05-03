@@ -9,6 +9,13 @@ interface PrivacySettings {
     dataRetention?: '1d' | '7d' | '30d' | 'forever';
 }
 
+interface HooUpdateResult {
+    ok: boolean;
+    status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed';
+    message: string;
+    details?: string;
+}
+
 interface ElectronAPI {
     navigateTab: (tabId: string, url: string) => Promise<void>;
     setMosaicView: (tabId1: string, tabId2: string) => Promise<{ activeTabId: string, splitTabId: string }>;
@@ -30,6 +37,7 @@ interface ElectronAPI {
         storage: { usedBytes: number; usedText: string };
     }>;
     nuclearWipe: () => Promise<void>;
+    checkForUpdates: () => Promise<HooUpdateResult>;
     toggleSidebar: (collapsed: boolean) => Promise<void>;
     hideBrowserView: () => Promise<void>;
     minimize: () => Promise<void>;
