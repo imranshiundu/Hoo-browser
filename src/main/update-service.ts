@@ -5,10 +5,14 @@ import * as path from 'path';
 
 type UpdateResult = {
     ok: boolean;
-    status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed';
+    status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed' | 'restart-required';
     message: string;
     details?: string;
     appRoot?: string;
+    before?: string;
+    after?: string;
+    installRan?: boolean;
+    buildRan?: boolean;
 };
 
 let updateInProgress = false;
@@ -35,9 +39,21 @@ function resolveAppRoot(): string {
     return app.getAppPath();
 }
 
-function run(command: string, args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
+function run(command: string, args: string[], cwd: string, timeoutMs = 1000 * 60 * 10): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-        execFile(command, args, { cwd, timeout: 1000 * 60 * 15, env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' } }, (error, stdout, stderr) => {
+        execFile(command, args, {
+            cwd,
+            timeout: timeoutMs,
+            env: {
+                ...process.env,
+                CI: '1',
+                npm_config_audit: 'false',
+                npm_config_fund: 'false',
+                npm_config_update_notifier: 'false',
+                npm_config_progress: 'false',
+                npm_config_prefer_offline: 'true'
+            }
+        }, (error, stdout, stderr) => {
             if (error) return reject(new Error(`${command} ${args.join(' ')} failed\n${error.message}\n${stderr || ''}`.trim()));
             resolve({ stdout, stderr });
         });
@@ -59,6 +75,37 @@ async function cleanGeneratedChanges(appRoot: string, status: string): Promise<v
     }
 }
 
+async function changedFilesBetween(appRoot: string, before: string, after: string): Promise<string[]> {
+    const diff = (await run('git', ['diff', '--name-only', before, after], appRoot)).stdout.trim();
+    return diff ? diff.split('\n').map(line => line.trim()).filter(Boolean) : [];
+}
+
+function dependencyFilesChanged(files: string[]): boolean {
+    return files.some(file => file === 'package.json' || file === 'package-lock.json' || file === 'npm-shrinkwrap.json');
+}
+
+function buildRelevantFilesChanged(files: string[]): boolean {
+    if (!files.length) return false;
+    return files.some(file =>
+        file.startsWith('src/') ||
+        file.startsWith('public/') ||
+        file.startsWith('assets/') ||
+        file === 'package.json' ||
+        file === 'package-lock.json' ||
+        file === 'tsconfig.json' ||
+        file === 'vite.config.ts' ||
+        file === 'webpack.config.js' ||
+        file.endsWith('.html')
+    );
+}
+
+function summarizeFiles(files: string[]): string {
+    if (!files.length) return 'No changed files detected.';
+    const shown = files.slice(0, 18).join('\n');
+    const extra = files.length > 18 ? `\n…plus ${files.length - 18} more file(s)` : '';
+    return `${shown}${extra}`;
+}
+
 export async function checkForHooUpdates(): Promise<UpdateResult> {
     if (updateInProgress) {
         return { ok: false, status: 'busy', message: 'Hoo is already checking for updates.' };
@@ -75,7 +122,7 @@ export async function checkForHooUpdates(): Promise<UpdateResult> {
                 ok: false,
                 status: 'unsupported',
                 message: 'This copy is not running from the source repo, so Hoo cannot safely pull GitHub updates from inside the app.',
-                details: `Detected app root: ${appRoot}\nRun this manually instead:\ncd ~/.local/share/hoo-browser && git pull origin main && npm install --no-audit --no-fund && npm run build`,
+                details: `Detected app root: ${appRoot}\nRun this manually instead:\ncd ~/.local/share/hoo-browser && git pull origin main && npm install --no-audit --no-fund --prefer-offline && npm run build`,
                 appRoot
             };
         }
@@ -96,25 +143,44 @@ export async function checkForHooUpdates(): Promise<UpdateResult> {
             };
         }
 
-        await run('git', ['fetch', '--prune', 'origin', 'main'], appRoot);
+        await run('git', ['fetch', '--prune', '--quiet', 'origin', 'main'], appRoot, 1000 * 60 * 3);
         const local = (await run('git', ['rev-parse', 'HEAD'], appRoot)).stdout.trim();
         const remote = (await run('git', ['rev-parse', 'origin/main'], appRoot)).stdout.trim();
 
         if (local === remote) {
-            return { ok: true, status: 'current', message: 'Hoo Browser is already up to date.', details: `Checked: ${appRoot}`, appRoot };
+            return { ok: true, status: 'current', message: 'Hoo Browser is already up to date.', details: `Checked: ${appRoot}`, appRoot, before: local, after: remote };
         }
 
-        await run('git', ['pull', '--ff-only', 'origin', 'main'], appRoot);
-        if (fs.existsSync(path.join(appRoot, 'package-lock.json'))) await run('npm', ['install', '--no-audit', '--no-fund'], appRoot);
-        else await run('npm', ['install', '--no-audit', '--no-fund'], appRoot);
-        await run('npm', ['run', 'build'], appRoot);
+        const changedFiles = await changedFilesBetween(appRoot, local, remote);
+        const needsInstall = dependencyFilesChanged(changedFiles) || !fs.existsSync(path.join(appRoot, 'node_modules'));
+        const needsBuild = buildRelevantFilesChanged(changedFiles);
+
+        await run('git', ['pull', '--ff-only', '--quiet', 'origin', 'main'], appRoot, 1000 * 60 * 3);
+
+        if (needsInstall) {
+            if (fs.existsSync(path.join(appRoot, 'package-lock.json'))) {
+                await run('npm', ['ci', '--no-audit', '--no-fund', '--prefer-offline'], appRoot, 1000 * 60 * 10);
+            } else {
+                await run('npm', ['install', '--no-audit', '--no-fund', '--prefer-offline'], appRoot, 1000 * 60 * 10);
+            }
+        }
+
+        if (needsBuild) {
+            await run('npm', ['run', 'build'], appRoot, 1000 * 60 * 6);
+        }
 
         return {
             ok: true,
             status: 'updated',
-            message: 'Hoo Browser was updated from GitHub. Restart the browser to use the new version.',
-            details: `Updated: ${appRoot}`,
-            appRoot
+            message: needsBuild
+                ? 'Hoo Browser updated and rebuilt. Restart Hoo to use the new version.'
+                : 'Hoo Browser updated. Restart Hoo to use the new version.',
+            details: `Updated: ${appRoot}\nFrom: ${local}\nTo: ${remote}\nInstall: ${needsInstall ? 'yes' : 'skipped'}\nBuild: ${needsBuild ? 'yes' : 'skipped'}\n\nChanged files:\n${summarizeFiles(changedFiles)}`,
+            appRoot,
+            before: local,
+            after: remote,
+            installRan: needsInstall,
+            buildRan: needsBuild
         };
     } catch (error: any) {
         return {
