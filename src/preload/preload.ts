@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onSwitchToBrowser: (callback: (tabId: string) => void) => {
         ipcRenderer.on('switch-to-browser', (_event, tabId) => callback(tabId));
     },
+    onSwitchToHome: (callback: () => void) => {
+        ipcRenderer.on('switch-to-home', () => callback());
+    },
 
     // Auth
     googleLogin: () => ipcRenderer.invoke('google-login'),
