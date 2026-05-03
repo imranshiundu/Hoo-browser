@@ -7,18 +7,23 @@ import Browser from './views/Browser';
 import TabStrip from './components/TabStrip';
 import { Tab } from './types';
 
-const HOME_TAB: Tab = { id: 'home', type: 'home', title: 'New Tab' };
+const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
+const initialHomeTab = makeHomeTab();
 
 const App: React.FC = () => {
-    const [tabs, setTabs] = useState<Tab[]>([HOME_TAB]);
-    const [activeTabId, setActiveTabId] = useState<string>('home');
+    const [tabs, setTabs] = useState<Tab[]>([initialHomeTab]);
+    const [activeTabId, setActiveTabId] = useState<string>(initialHomeTab.id);
     const [splitTabId, setSplitTabId] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
+    const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || initialHomeTab;
+
     const openHomeTab = (): void => {
-        setTabs(prev => prev.some(t => t.id === 'home') ? prev : [HOME_TAB, ...prev]);
-        setActiveTabId('home');
+        const tab = makeHomeTab();
+        setTabs(prev => [...prev, tab]);
+        setActiveTabId(tab.id);
         setSplitTabId(null);
+        void window.electronAPI?.hideBrowserView?.();
     };
 
     useEffect(() => {
@@ -29,23 +34,88 @@ const App: React.FC = () => {
             const restoredActive = data.activeTabId && browserTabs.some(t => t.id === data.activeTabId)
                 ? data.activeTabId
                 : browserTabs[0]?.id;
-            setTabs(browserTabs.length ? browserTabs : [HOME_TAB]);
-            setActiveTabId(restoredActive || 'home');
+            if (browserTabs.length) {
+                setTabs(browserTabs);
+                setActiveTabId(restoredActive || browserTabs[0].id);
+            } else {
+                const home = makeHomeTab();
+                setTabs([home]);
+                setActiveTabId(home.id);
+            }
         };
         void loadInitialData();
     }, []);
 
-    const activeTab = tabs.find(t => t.id === activeTabId) || HOME_TAB;
+    const handleSwitchTab = async (tabId: string): Promise<void> => {
+        if (tabId === activeTabId) return;
+        const targetTab = tabs.find(t => t.id === tabId);
+        if (targetTab?.type === 'browser') await window.electronAPI?.switchTab(tabId);
+        else await window.electronAPI?.hideBrowserView?.();
+        setActiveTabId(tabId);
+        setSplitTabId(null);
+    };
+
+    const handleCloseTab = async (tabId: string): Promise<void> => {
+        const targetTab = tabs.find(t => t.id === tabId);
+        if (!targetTab) return;
+
+        const tabIndex = tabs.findIndex(t => t.id === tabId);
+        const remainingTabs = tabs.filter(t => t.id !== tabId);
+        const nextTab = remainingTabs[Math.min(tabIndex, remainingTabs.length - 1)] || remainingTabs[remainingTabs.length - 1];
+
+        if (targetTab.type === 'browser') await window.electronAPI?.closeTab(tabId);
+        else await window.electronAPI?.hideBrowserView?.();
+
+        if (!remainingTabs.length) {
+            const home = makeHomeTab();
+            setTabs([home]);
+            setActiveTabId(home.id);
+            setSplitTabId(null);
+            await window.electronAPI?.hideBrowserView?.();
+            return;
+        }
+
+        setTabs(remainingTabs);
+        if (activeTabId === tabId || splitTabId === tabId) {
+            setActiveTabId(nextTab.id);
+            setSplitTabId(null);
+            if (nextTab.type === 'browser') await window.electronAPI?.switchTab(nextTab.id);
+            else await window.electronAPI?.hideBrowserView?.();
+        }
+    };
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
+            const key = e.key.toLowerCase();
+            const mod = e.ctrlKey || e.metaKey;
+            if (mod && key === 'l') {
                 e.preventDefault();
                 document.dispatchEvent(new CustomEvent('hoo-focus-address'));
             }
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') {
+            if (mod && key === 't') {
                 e.preventDefault();
                 openHomeTab();
+            }
+            if (mod && key === 'w') {
+                e.preventDefault();
+                void handleCloseTab(activeTabId);
+            }
+            if (mod && e.shiftKey && key === 'tab') {
+                e.preventDefault();
+                const index = tabs.findIndex(t => t.id === activeTabId);
+                const next = tabs[(index - 1 + tabs.length) % tabs.length];
+                if (next) void handleSwitchTab(next.id);
+            } else if (mod && key === 'tab') {
+                e.preventDefault();
+                const index = tabs.findIndex(t => t.id === activeTabId);
+                const next = tabs[(index + 1) % tabs.length];
+                if (next) void handleSwitchTab(next.id);
+            }
+            if (mod && /^[1-9]$/.test(key)) {
+                e.preventDefault();
+                const index = key === '9' ? tabs.length - 1 : Number(key) - 1;
+                const next = tabs[index];
+                if (next) void handleSwitchTab(next.id);
             }
             if (e.key === 'Escape' && settingsOpen) {
                 e.preventDefault();
@@ -54,7 +124,7 @@ const App: React.FC = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [settingsOpen, tabs]);
+    }, [settingsOpen, tabs, activeTabId, splitTabId]);
 
     useEffect(() => {
         if (settingsOpen) {
@@ -71,11 +141,16 @@ const App: React.FC = () => {
         });
         window.electronAPI?.onSwitchToBrowser((tabId) => {
             setTabs(prev => prev.find(t => t.id === tabId)
-                ? prev.filter(t => t.id !== 'home')
-                : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
+                ? prev.filter(t => t.type !== 'home')
+                : [...prev.filter(t => t.type !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
             setActiveTabId(tabId);
         });
-        window.electronAPI?.onSwitchToHome?.(() => openHomeTab());
+        window.electronAPI?.onSwitchToHome?.(() => {
+            const home = makeHomeTab();
+            setTabs(prev => [...prev.filter(t => t.type !== 'home'), home]);
+            setActiveTabId(home.id);
+            setSplitTabId(null);
+        });
     }, []);
 
     const handleNavigateFromHome = async (url: string): Promise<void> => {
@@ -83,18 +158,9 @@ const App: React.FC = () => {
         const tabId = await window.electronAPI.navigateTo(url);
         if (!tabId) return;
         setTabs(prev => prev.find(t => t.id === tabId)
-            ? prev.filter(t => t.id !== 'home')
-            : [...prev.filter(t => t.id !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url }]);
+            ? prev.filter(t => t.type !== 'home')
+            : [...prev.filter(t => t.type !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url }]);
         setActiveTabId(tabId);
-    };
-
-    const handleSwitchTab = async (tabId: string): Promise<void> => {
-        if (tabId === activeTabId) return;
-        const targetTab = tabs.find(t => t.id === tabId);
-        if (targetTab?.type === 'browser') await window.electronAPI?.switchTab(tabId);
-        else await window.electronAPI?.hideBrowserView?.();
-        setActiveTabId(tabId);
-        setSplitTabId(null);
     };
 
     const handleSplitTab = async (tabId: string): Promise<void> => {
@@ -108,24 +174,14 @@ const App: React.FC = () => {
         }
     };
 
-    const handleCloseTab = async (tabId: string): Promise<void> => {
-        const targetTab = tabs.find(t => t.id === tabId);
-        if (!targetTab || targetTab.type !== 'browser') return;
-        await window.electronAPI?.closeTab(tabId);
-        const remainingBrowserTabs = tabs.filter(t => t.id !== tabId && t.type === 'browser');
-        setTabs(remainingBrowserTabs.length ? remainingBrowserTabs : [HOME_TAB]);
-        if (activeTabId === tabId) setActiveTabId(remainingBrowserTabs[remainingBrowserTabs.length - 1]?.id || 'home');
-    };
-
     const browserTabs = tabs.filter(t => t.type === 'browser');
-    const stripTabs = tabs;
 
     return (
         <div className="app-shell">
             <TitleBar />
             <main className="browser-shell">
                 <TabStrip
-                    tabs={stripTabs}
+                    tabs={tabs}
                     activeTabId={activeTabId}
                     splitTabId={splitTabId}
                     onSwitchTab={(id): void => { void handleSwitchTab(id); }}
