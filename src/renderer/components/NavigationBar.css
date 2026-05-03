@@ -1,124 +1,74 @@
 .navigation-bar {
-    height: 52px;
-    background: rgba(10, 15, 12, 0.7);
-    backdrop-filter: blur(24px);
+    height: 44px;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
-    padding: 0 16px;
-    gap: 16px;
-    margin: 0 0 10px 0;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    z-index: 100;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    flex-shrink: 0;
-}
-
-.nav-controls {
-    display: flex;
     gap: 4px;
+    padding: 5px 8px;
+    background: #0b0b0b;
+    border-bottom: 1px solid #242424;
+    z-index: 100;
 }
 
 .nav-btn {
     width: 32px;
     height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    place-items: center;
     background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.6);
-    border-radius: 8px;
+    border: 0;
+    color: rgba(255, 255, 255, 0.68);
+    border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s ease;
 }
 
 .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: white;
-}
-
-.address-bar-wrapper {
-    flex: 1;
-    height: 34px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    padding: 0 10px;
-    gap: 10px;
-    transition: all 0.3s ease;
-}
-
-.address-bar-wrapper:focus-within {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.05);
-}
-
-.security-indicator {
-    color: rgba(255, 255, 255, 0.4);
-    display: flex;
-    align-items: center;
-}
-
-.lock-icon {
-    color: #4cd964;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
 }
 
 .address-form {
     flex: 1;
-    height: 100%;
+    min-width: 0;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    margin: 0 6px;
+    background: #1b1b1b;
+    border: 1px solid #2f2f2f;
+    border-radius: 7px;
+}
+
+.address-form:focus-within {
+    border-color: #ff6a00;
+    background: #151515;
+}
+
+.security-indicator {
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.58);
+    flex: 0 0 auto;
+}
+
+.security-indicator svg {
+    color: #ff6a00;
 }
 
 .address-input {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     height: 100%;
     background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.9);
+    border: 0;
+    outline: 0;
+    color: #ffffff;
     font-size: 13px;
-    font-weight: 400;
-    outline: none;
     font-family: inherit;
 }
 
-.hoo-shield-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 11px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.hoo-shield-indicator:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-}
-
-.shield-count {
-    font-family: monospace;
-}
-
-.nav-right-actions {
-    display: flex;
-    align-items: center;
-}
-
-.user-mode-badge {
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 1px;
-    color: #fff;
-    background: linear-gradient(135deg, #FF3B30, #FF9500);
-    padding: 3px 8px;
-    border-radius: 6px;
-    box-shadow: 0 4px 10px rgba(255, 59, 48, 0.2);
+.address-input::placeholder {
+    color: rgba(255, 255, 255, 0.46);
 }
