@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './PrivacyView.css';
-import { Shield, Lock, EyeOff, Fingerprint, Activity, CheckCircle2, AlertTriangle, Zap, KeyRound, Database } from 'lucide-react';
+import { Shield, Lock, EyeOff, Fingerprint, Activity, CheckCircle2, AlertTriangle, Zap, KeyRound, Database, RefreshCw, DownloadCloud } from 'lucide-react';
 
 interface PrivacySettings {
     adShield: boolean;
@@ -21,6 +21,8 @@ const PrivacyView: React.FC = () => {
         dataRetention: 'forever'
     });
     const [saved, setSaved] = useState(false);
+    const [updating, setUpdating] = useState(false);
+    const [updateResult, setUpdateResult] = useState<{ ok: boolean; status: string; message: string; details?: string } | null>(null);
 
     useEffect(() => {
         const load = async () => {
@@ -41,27 +43,45 @@ const PrivacyView: React.FC = () => {
         setTimeout(() => setSaved(false), 1500);
     };
 
+    const checkForUpdates = async () => {
+        if (!window.electronAPI?.checkForUpdates || updating) return;
+        setUpdating(true);
+        setUpdateResult(null);
+        try {
+            const result = await window.electronAPI.checkForUpdates();
+            setUpdateResult(result);
+        } catch (error: any) {
+            setUpdateResult({
+                ok: false,
+                status: 'failed',
+                message: error?.message || 'Hoo could not check for updates.'
+            });
+        } finally {
+            setUpdating(false);
+        }
+    };
+
     const modules = [
         {
             key: 'adShield' as keyof PrivacySettings,
             icon: Shield,
             title: 'Ad & Tracker Shield',
             description: 'Blocks known ad and tracker hosts before they load. Current implementation is useful but still needs maintained filter-list support.',
-            color: '#22c55e'
+            color: '#3DBB78'
         },
         {
             key: 'fingerprintCloak' as keyof PrivacySettings,
             icon: Fingerprint,
             title: 'Fingerprint Profile',
             description: 'Experimental identity masking. This must evolve into stable per-profile fingerprints; random per-request identities are not a finished privacy design.',
-            color: '#3b82f6'
+            color: '#8EB876'
         },
         {
             key: 'forceHttps' as keyof PrivacySettings,
             icon: Lock,
             title: 'HTTPS Upgrade',
             description: 'Attempts to upgrade insecure HTTP navigation to HTTPS where available. Some sites may still need fallback handling.',
-            color: '#a855f7'
+            color: '#FF6A00'
         },
         {
             key: 'scriptFortress' as keyof PrivacySettings,
@@ -88,8 +108,8 @@ const PrivacyView: React.FC = () => {
                     <Shield size={72} className="giant-shield" />
                     <div className="shield-glow" />
                 </div>
-                <p className="eyebrow">Privacy and encryption control</p>
-                <h1 className="privacy-title">Know exactly what Zen is protecting.</h1>
+                <p className="eyebrow">Hoo control center</p>
+                <h1 className="privacy-title">Protection, updates, and honest browser controls.</h1>
                 <p className="privacy-description">
                     {activeCount} of {modules.length} browser controls active.
                     {saved && <span className="saved-badge"> Saved.</span>}
@@ -100,6 +120,31 @@ const PrivacyView: React.FC = () => {
                 </div>
             </div>
 
+            <div className="update-card">
+                <div className="mod-icon update-icon"><DownloadCloud size={24} /></div>
+                <div className="update-info">
+                    <div className="mod-title-row">
+                        <span className="mod-title">Hoo Browser updates</span>
+                        <span className={`mod-status ${updateResult?.ok ? 'active' : updateResult ? 'inactive' : 'active'}`}>
+                            {updating ? 'CHECKING' : updateResult?.status?.toUpperCase() || 'GITHUB'}
+                        </span>
+                    </div>
+                    <p className="mod-description">
+                        Press this anytime to fetch the latest Hoo Browser changes from GitHub, rebuild the app, and keep the installed browser current.
+                    </p>
+                    {updateResult && (
+                        <p className={`update-result ${updateResult.ok ? 'ok' : 'bad'}`}>
+                            {updateResult.message}
+                            {updateResult.details && <span>{updateResult.details}</span>}
+                        </p>
+                    )}
+                </div>
+                <button className="update-button" type="button" onClick={checkForUpdates} disabled={updating}>
+                    <RefreshCw size={16} className={updating ? 'spinning' : ''} />
+                    {updating ? 'Checking…' : 'Check for Updates'}
+                </button>
+            </div>
+
             <div className="encryption-card">
                 <div className="mod-icon encryption-icon"><KeyRound size={24} /></div>
                 <div>
@@ -108,7 +153,7 @@ const PrivacyView: React.FC = () => {
                         <span className="mod-status active">OS-PROTECTED WHEN AVAILABLE</span>
                     </div>
                     <p className="mod-description">
-                        Zen uses Electron safeStorage for local profile data when the operating system exposes encryption. Next step: show live encryption availability and add passphrase-protected backup export.
+                        Hoo uses Electron safeStorage for local profile data when the operating system exposes encryption. Next step: show live encryption availability and add passphrase-protected backup export.
                     </p>
                 </div>
             </div>
@@ -162,7 +207,7 @@ const PrivacyView: React.FC = () => {
 
                 <div className="privacy-note">
                     <EyeOff size={16} />
-                    <span>Zen should describe protection precisely. No fake anonymity claims, no inflated tracker counts, no hidden page sharing.</span>
+                    <span>Hoo should describe protection precisely. No fake anonymity claims, no inflated tracker counts, no hidden page sharing.</span>
                 </div>
             </div>
         </div>
