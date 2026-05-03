@@ -1,21 +1,23 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+const baseTsRule = {
+    test: /\.tsx?$/,
+    use: 'ts-loader',
+    exclude: /node_modules/,
+};
 
 module.exports = [
-    // Main Process Configuration
     {
-        mode: 'development',
+        name: 'main',
+        mode: isProduction ? 'production' : 'development',
         entry: './src/main/main.ts',
         target: 'electron-main',
+        devtool: isProduction ? false : 'source-map',
         module: {
-            rules: [
-                {
-                    test: /\.ts$/,
-                    use: 'ts-loader',
-                    exclude: /node_modules/,
-                },
-            ],
+            rules: [baseTsRule],
         },
         resolve: {
             extensions: ['.ts', '.js'],
@@ -25,20 +27,14 @@ module.exports = [
             filename: 'main.js',
         },
     },
-
-    // Preload Process Configuration
     {
-        mode: 'development',
+        name: 'preload',
+        mode: isProduction ? 'production' : 'development',
         entry: './src/preload/preload.ts',
         target: 'electron-preload',
+        devtool: isProduction ? false : 'source-map',
         module: {
-            rules: [
-                {
-                    test: /\.ts$/,
-                    use: 'ts-loader',
-                    exclude: /node_modules/,
-                },
-            ],
+            rules: [baseTsRule],
         },
         resolve: {
             extensions: ['.ts', '.js'],
@@ -48,20 +44,15 @@ module.exports = [
             filename: 'preload.js',
         },
     },
-
-    // Renderer Process Configuration
     {
-        mode: 'development',
+        name: 'renderer',
+        mode: isProduction ? 'production' : 'development',
         entry: './src/renderer/renderer.tsx',
         target: 'electron-renderer',
-        devtool: 'source-map',
+        devtool: isProduction ? false : 'source-map',
         module: {
             rules: [
-                {
-                    test: /\.(ts|tsx)$/,
-                    use: 'ts-loader',
-                    exclude: /node_modules/,
-                },
+                baseTsRule,
                 {
                     test: /\.css$/,
                     use: ['style-loader', 'css-loader'],
