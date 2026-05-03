@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, Shield, Lock, Globe } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, Settings } from 'lucide-react';
 
 interface NavigationBarProps {
     tabId: string;
@@ -9,6 +9,7 @@ interface NavigationBarProps {
     onBack: () => void;
     onForward: () => void;
     onReload: () => void;
+    onOpenSettings?: () => void;
 }
 
 const NavigationBar: React.FC<NavigationBarProps> = ({
@@ -16,67 +17,61 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     onNavigate,
     onBack,
     onForward,
-    onReload
+    onReload,
+    onOpenSettings
 }) => {
     const [inputValue, setInputValue] = useState(url);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => setInputValue(url), [url]);
 
     useEffect(() => {
-        setInputValue(url);
-    }, [url]);
+        const focusAddress = () => inputRef.current?.focus();
+        document.addEventListener('hoo-focus-address', focusAddress);
+        return () => document.removeEventListener('hoo-focus-address', focusAddress);
+    }, []);
+
+    const normalizeTarget = (value: string) => {
+        let target = value.trim();
+        if (!target) return '';
+        if (target.startsWith('!w ')) return `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(target.substring(3))}`;
+        if (target.startsWith('!y ')) return `https://www.youtube.com/results?search_query=${encodeURIComponent(target.substring(3))}`;
+        if (target.startsWith('!g ')) return `https://www.google.com/search?q=${encodeURIComponent(target.substring(3))}`;
+        if (target.startsWith('!d ')) return `https://duckduckgo.com/?q=${encodeURIComponent(target.substring(3))}`;
+        const isUrl = target.includes('.') && !target.includes(' ') && (target.startsWith('http') || target.split('/')[0].includes('.'));
+        if (!isUrl) return `https://duckduckgo.com/?q=${encodeURIComponent(target)}`;
+        if (!target.startsWith('http')) return `https://${target}`;
+        return target;
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        let target = inputValue.trim();
-        if (!target) return;
-
-        if (target.startsWith('!w ')) {
-            target = `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(target.substring(3))}`;
-        } else if (target.startsWith('!y ')) {
-            target = `https://www.youtube.com/results?search_query=${encodeURIComponent(target.substring(3))}`;
-        } else if (target.startsWith('!g ')) {
-            target = `https://www.google.com/search?q=${encodeURIComponent(target.substring(3))}`;
-        } else if (target.startsWith('!d ')) {
-            target = `https://duckduckgo.com/?q=${encodeURIComponent(target.substring(3))}`;
-        } else {
-            const isUrl = target.includes('.') && !target.includes(' ') && (target.startsWith('http') || target.split('/')[0].includes('.'));
-            if (!isUrl) target = `https://duckduckgo.com/?q=${encodeURIComponent(target)}`;
-            else if (!target.startsWith('http')) target = `https://${target}`;
-        }
-
-        onNavigate(target);
+        const target = normalizeTarget(inputValue);
+        if (target) onNavigate(target);
     };
 
     return (
         <div className="navigation-bar">
-            <div className="nav-controls">
-                <button className="nav-btn" onClick={onBack} title="Back"><ArrowLeft size={16} /></button>
-                <button className="nav-btn" onClick={onForward} title="Forward"><ArrowRight size={16} /></button>
-                <button className="nav-btn" onClick={onReload} title="Reload"><RotateCw size={16} /></button>
-            </div>
+            <button className="nav-btn" onClick={onBack} title="Back"><ArrowLeft size={17} /></button>
+            <button className="nav-btn" onClick={onForward} title="Forward"><ArrowRight size={17} /></button>
+            <button className="nav-btn" onClick={onReload} title="Reload"><RotateCw size={16} /></button>
 
-            <div className="address-bar-wrapper">
-                <div className="security-indicator">
-                    {url.startsWith('https') ? <Lock size={12} className="lock-icon" /> : <Globe size={12} />}
-                </div>
-                <form onSubmit={handleSubmit} className="address-form">
-                    <input
-                        type="text"
-                        className="address-input"
-                        value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        placeholder="Search with DuckDuckGo or enter address"
-                    />
-                </form>
-                <div className="hoo-shield-indicator" title="Hoo Shields Active">
-                    <Shield size={14} />
-                    <span className="shield-count">12</span>
-                </div>
-            </div>
+            <form onSubmit={handleSubmit} className="address-form">
+                <span className="security-indicator">
+                    {url.startsWith('https') ? <Lock size={13} /> : <Globe size={13} />}
+                </span>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    className="address-input"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    placeholder="Search with DuckDuckGo or enter address"
+                />
+            </form>
 
-            <div className="nav-right-actions">
-                <div className="user-mode-badge">PRIVATE</div>
-            </div>
+            <button className="nav-btn" onClick={onOpenSettings} title="Settings"><Settings size={17} /></button>
         </div>
     );
 };
