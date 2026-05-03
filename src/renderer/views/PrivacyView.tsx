@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './PrivacyView.css';
-import { Shield, Lock, EyeOff, Fingerprint, Activity, CheckCircle2, XCircle, Zap } from 'lucide-react';
+import { Shield, Lock, EyeOff, Fingerprint, Activity, CheckCircle2, AlertTriangle, Zap, KeyRound, Database } from 'lucide-react';
 
 interface PrivacySettings {
     adShield: boolean;
@@ -46,35 +46,35 @@ const PrivacyView: React.FC = () => {
             key: 'adShield' as keyof PrivacySettings,
             icon: Shield,
             title: 'Ad & Tracker Shield',
-            description: 'Blocks ads, analytics trackers, and cross-site data collectors at the network level before they load. Uses a curated host blocklist updated regularly.',
+            description: 'Blocks known ad and tracker hosts before they load. Current implementation is useful but still needs maintained filter-list support.',
             color: '#22c55e'
         },
         {
             key: 'fingerprintCloak' as keyof PrivacySettings,
             icon: Fingerprint,
-            title: 'Fingerprint Cloak',
-            description: 'Randomizes your browser fingerprint on every request — User-Agent, platform, renderer info — so advertising networks cannot build a profile of you.',
+            title: 'Fingerprint Profile',
+            description: 'Experimental identity masking. This must evolve into stable per-profile fingerprints; random per-request identities are not a finished privacy design.',
             color: '#3b82f6'
         },
         {
             key: 'forceHttps' as keyof PrivacySettings,
             icon: Lock,
-            title: 'Force HTTPS',
-            description: 'Automatically upgrades all HTTP requests to HTTPS. If a site does not support HTTPS, it will fail rather than send your data in cleartext.',
+            title: 'HTTPS Upgrade',
+            description: 'Attempts to upgrade insecure HTTP navigation to HTTPS where available. Some sites may still need fallback handling.',
             color: '#a855f7'
         },
         {
             key: 'scriptFortress' as keyof PrivacySettings,
             icon: Activity,
             title: 'Script Fortress',
-            description: 'Blocks inline and third-party JavaScript from executing. This is a strong protection against malicious scripts and zero-day browser exploits. Warning: may break some sites.',
+            description: 'Future strict mode for blocking risky scripts. Kept off by default because aggressive script blocking can break normal websites.',
             color: '#f59e0b'
         },
         {
             key: 'deepSpoof' as keyof PrivacySettings,
             icon: Zap,
-            title: 'WhatsApp Windows Spoof',
-            description: 'Convinces WhatsApp Web that you are on Windows by overriding the User-Agent and navigator.platform on whatsapp.com. This unlocks video calls and voice calls for Linux users.',
+            title: 'WhatsApp Linux Compatibility',
+            description: 'Experimental WhatsApp Web profile behavior for Linux users. This is a compatibility feature, not a privacy shield.',
             color: '#25d366'
         },
     ];
@@ -85,19 +85,31 @@ const PrivacyView: React.FC = () => {
         <div className="privacy-view">
             <div className="privacy-hero">
                 <div className="shield-container">
-                    <Shield size={80} className="giant-shield" />
+                    <Shield size={72} className="giant-shield" />
                     <div className="shield-glow" />
                 </div>
-                <h1 className="privacy-title">Privacy Control Centre</h1>
+                <p className="eyebrow">Privacy and encryption control</p>
+                <h1 className="privacy-title">Know exactly what Zen is protecting.</h1>
                 <p className="privacy-description">
-                    {activeCount} of {modules.length} shields active.
+                    {activeCount} of {modules.length} browser controls active.
                     {saved && <span className="saved-badge"> Saved.</span>}
                 </p>
-                <div className={`security-badge ${activeCount === modules.length ? '' : 'partial'}`}>
-                    {activeCount === modules.length
-                        ? <><CheckCircle2 size={14} /> FULLY HARDENED</>
-                        : <><XCircle size={14} /> PARTIAL PROTECTION</>
-                    }
+                <div className="status-row">
+                    <div className="security-badge partial"><AlertTriangle size={14} /> PROTOTYPE SHIELDS</div>
+                    <div className="security-badge"><CheckCircle2 size={14} /> DUCKDUCKGO-FIRST</div>
+                </div>
+            </div>
+
+            <div className="encryption-card">
+                <div className="mod-icon encryption-icon"><KeyRound size={24} /></div>
+                <div>
+                    <div className="mod-title-row">
+                        <span className="mod-title">Local profile encryption</span>
+                        <span className="mod-status active">OS-PROTECTED WHEN AVAILABLE</span>
+                    </div>
+                    <p className="mod-description">
+                        Zen uses Electron safeStorage for local profile data when the operating system exposes encryption. Next step: show live encryption availability and add passphrase-protected backup export.
+                    </p>
                 </div>
             </div>
 
@@ -117,25 +129,21 @@ const PrivacyView: React.FC = () => {
                             <p className="mod-description">{mod.description}</p>
                         </div>
                         <label className="toggle-switch">
-                            <input
-                                type="checkbox"
-                                checked={!!settings[mod.key]}
-                                onChange={() => toggle(mod.key)}
-                            />
+                            <input type="checkbox" checked={!!settings[mod.key]} onChange={() => toggle(mod.key)} />
                             <span className="toggle-slider" />
                         </label>
                     </div>
                 ))}
 
                 <div className="privacy-module retention-module">
-                    <div className="mod-icon" style={{ color: '#64748b' }}>
-                        <EyeOff size={22} />
+                    <div className="mod-icon" style={{ color: '#94a3b8' }}>
+                        <Database size={22} />
                     </div>
                     <div className="mod-info">
                         <div className="mod-title-row">
                             <span className="mod-title">History Retention</span>
                         </div>
-                        <p className="mod-description">How long browsing history is stored locally. "Forever" keeps it until you wipe manually.</p>
+                        <p className="mod-description">How long browsing history is stored locally. Use shorter retention for a cleaner profile.</p>
                     </div>
                     <select
                         className="retention-select"
@@ -150,6 +158,11 @@ const PrivacyView: React.FC = () => {
                         <option value="7d">7 days</option>
                         <option value="1d">24 hours</option>
                     </select>
+                </div>
+
+                <div className="privacy-note">
+                    <EyeOff size={16} />
+                    <span>Zen should describe protection precisely. No fake anonymity claims, no inflated tracker counts, no hidden page sharing.</span>
                 </div>
             </div>
         </div>
