@@ -18,7 +18,10 @@ app.commandLine.appendSwitch('no-sandbox');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,AutofillServerCommunication,Translate');
+app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+app.commandLine.appendSwitch('disable-webrtc-hw-decoding');
+app.commandLine.appendSwitch('disable-webrtc-hw-encoding');
+app.commandLine.appendSwitch('disable-features', 'OptimizationHints,MediaRouter,AutofillServerCommunication,Translate,WebRTCAllowInputVolumeAdjustment');
 
 let mainWindow: BrowserWindow | null = null;
 const browserViews: Map<string, BrowserView> = new Map();
@@ -54,6 +57,38 @@ function resolveAssetPath(...segments: string[]): string {
 
 function getPageUrlForRequest(details: any): string {
     return details?.webContents?.getURL?.() || details?.referrer || '';
+}
+
+function isHomeUrl(url?: string): boolean {
+    return !url || url === 'about:blank' || url === 'hoo://home';
+}
+
+function hideAllBrowserViews(): void {
+    if (!mainWindow) return;
+    browserViews.forEach((view): void => mainWindow!.removeBrowserView(view));
+    activeTabId = null;
+    splitTabId = null;
+}
+
+function showHomeForTab(tabId?: string): void {
+    hideAllBrowserViews();
+    if (tabId) {
+        const data = StorageService.load();
+        const tab = data.tabs.find(t => t.id === tabId);
+        if (tab) {
+            tab.url = 'about:blank';
+            tab.title = tab.title || 'New Tab';
+            tab.lastActiveAt = Date.now();
+            StorageService.save({ tabs: data.tabs, activeTabId: tabId });
+        }
+    }
+    mainWindow?.webContents.send('switch-to-home', tabId);
+}
+
+function buildErrorPage(url: string, description: string): string {
+    const safeUrl = encodeURIComponent(url || 'unknown');
+    const safeMessage = encodeURIComponent(description || 'This page could not be reached.');
+    return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#080a0a;color:#f3f4f6;font-family:Inter,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.card{width:min(680px,calc(100vw - 48px));border:1px solid rgba(255,102,0,.32);border-radius:22px;padding:34px;background:linear-gradient(135deg,rgba(255,102,0,.12),rgba(255,255,255,.035));box-shadow:0 24px 80px rgba(0,0,0,.45)}h1{margin:0 0 10px;font-size:28px}p{color:#b7bbc2;line-height:1.6}.url{margin-top:18px;font-size:13px;color:#f97316;word-break:break-all}.hint{margin-top:18px;font-size:13px;color:#9ca3af}</style></head><body><section class="card"><h1>Hoo could not open this page</h1><p>${decodeURIComponent(safeMessage)}</p><div class="url">${decodeURIComponent(safeUrl)}</div><div class="hint">Check your connection, reload, or open a new tab. Hoo kept the browser UI alive instead of leaving a blank page.</div></section></body></html>`)}`;
 }
 
 function injectSitePolish(view: BrowserView): void {
@@ -111,6 +146,9 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
     view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL): void => {
         mainWindow?.webContents.send('tab-loading-state', tabId, false, validatedURL);
         mainWindow?.webContents.send('tab-load-error', tabId, errorCode, errorDescription, validatedURL);
+        if (errorCode !== -3 && validatedURL && !validatedURL.startsWith('data:')) {
+            void view.webContents.loadURL(buildErrorPage(validatedURL, errorDescription));
+        }
     });
 
     view.webContents.on('page-title-updated', (_event, title): void => {
@@ -132,7 +170,7 @@ function restoreTabs(): void {
     const activeRestoreId = persistentData.activeTabId || tabs.find((tab: any) => tab.type === 'browser')?.id;
 
     tabs.forEach((tab: any): void => {
-        if (tab.type !== 'browser' || tab.id !== activeRestoreId) return;
+        if (tab.type !== 'browser' || tab.id !== activeRestoreId || isHomeUrl(tab.url)) return;
         const view = new BrowserView({
             webPreferences: {
                 nodeIntegration: false,
@@ -145,7 +183,7 @@ function restoreTabs(): void {
         browserViews.set(tab.id, view);
         applyPrivacyToSession(view.webContents.session);
         attachViewHandlers(tab.id, view);
-        if (tab.url) void view.webContents.loadURL(tab.url);
+        void view.webContents.loadURL(tab.url);
     });
 }
 
@@ -194,9 +232,7 @@ function createWindow(): void {
 }
 
 ipcMain.handle('hide-browser-view', async (): Promise<void> => {
-    if (!mainWindow) return;
-    browserViews.forEach((view): void => mainWindow!.removeBrowserView(view));
-    activeTabId = null;
+    hideAllBrowserViews();
     manualBounds = null;
 });
 
@@ -230,6 +266,10 @@ ipcMain.handle('get-performance-snapshot', async (): Promise<any> => getPerforma
 function applyPrivacyToSession(ses: Electron.Session): void {
     const filter = { urls: ['<all_urls>'] };
 
+    ses.setPermissionCheckHandler((_webContents, permission): boolean => {
+        return permission === 'media' ? true : false;
+    });
+
     ses.webRequest.onBeforeRequest(filter, (details, callback): void => {
         trackNetworkRequest();
         const lowDataDecision = shouldBlockForLowData(details.url, details.resourceType, privacySettings);
@@ -251,6 +291,9 @@ function applyPrivacyToSession(ses: Electron.Session): void {
     ses.webRequest.onBeforeSendHeaders(filter, (details, callback): void => {
         const headersIn = details.requestHeaders as unknown as Record<string, string | string[] | undefined>;
         const requestHeaders = stripJunkRequestHeaders(headersIn, details.url, getPageUrlForRequest(details));
+        requestHeaders['DNT'] = '1';
+        requestHeaders['Sec-GPC'] = '1';
+        requestHeaders['Accept-Language'] = 'en-US,en;q=0.9';
         if (privacySettings.deepSpoof && details.url.includes('web.whatsapp.com')) requestHeaders['User-Agent'] = WHATSAPP_UA;
         else requestHeaders['User-Agent'] = getRandomUserAgent();
         (callback as any)({ requestHeaders });
@@ -285,6 +328,11 @@ function updateBrowserViewBounds(): void {
 
 function showBrowserView(tabId: string, isSplit = false): void {
     if (!mainWindow) return;
+    const view = browserViews.get(tabId);
+    if (!view) {
+        showHomeForTab(tabId);
+        return;
+    }
     if (isSplit) splitTabId = tabId;
     else {
         activeTabId = tabId;
@@ -294,12 +342,11 @@ function showBrowserView(tabId: string, isSplit = false): void {
     const needed = new Set<string>([tabId]);
     if (splitTabId) needed.add(splitTabId);
 
-    browserViews.forEach((view, id): void => {
-        if (!needed.has(id)) mainWindow!.removeBrowserView(view);
+    browserViews.forEach((browserView, id): void => {
+        if (!needed.has(id)) mainWindow!.removeBrowserView(browserView);
     });
 
-    const activeView = browserViews.get(tabId);
-    if (activeView && !mainWindow.getBrowserViews().includes(activeView)) mainWindow.addBrowserView(activeView);
+    if (!mainWindow.getBrowserViews().includes(view)) mainWindow.addBrowserView(view);
     if (splitTabId) {
         const splitView = browserViews.get(splitTabId);
         if (splitView && !mainWindow.getBrowserViews().includes(splitView)) mainWindow.addBrowserView(splitView);
@@ -350,30 +397,37 @@ function createBrowserViewForTab(tabId: string, partition?: string): BrowserView
 ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isApp?: boolean, title?: string): Promise<string | null> => {
     if (!mainWindow) return null;
     const tabId = Date.now().toString();
-    const view = createBrowserViewForTab(tabId, partition);
-    showBrowserView(tabId);
+    const data = StorageService.load();
+    const isHome = isHomeUrl(url);
+    data.tabs.push({ id: tabId, type: 'browser', title: title || (isApp ? 'App' : 'New Tab'), url: isHome ? 'about:blank' : url, isApp, partition, lastActiveAt: Date.now() });
+    StorageService.save({ tabs: data.tabs, activeTabId: tabId });
 
-    if (url && url !== 'about:blank') {
-        void view.webContents.loadURL(url);
-        const stData = StorageService.load();
-        stData.history.push({ url, title: url, timestamp: Date.now() });
-        StorageService.save({ history: stData.history });
+    if (isHome) {
+        showHomeForTab(tabId);
+        return tabId;
     }
 
-    const data = StorageService.load();
-    data.tabs.push({ id: tabId, type: 'browser', title: title || (isApp ? 'App' : 'New Tab'), url, isApp, partition, lastActiveAt: Date.now() });
-    StorageService.save({ tabs: data.tabs, activeTabId: tabId });
+    const view = createBrowserViewForTab(tabId, partition);
+    showBrowserView(tabId);
+    void view.webContents.loadURL(url);
+    const stData = StorageService.load();
+    stData.history.push({ url, title: url, timestamp: Date.now() });
+    StorageService.save({ history: stData.history });
     return tabId;
 });
 
 ipcMain.handle('switch-tab', async (_event, tabId: string): Promise<string> => {
     const data = StorageService.load();
     const tab = data.tabs.find(t => t.id === tabId);
-    if (tab && !browserViews.has(tabId)) {
+    if (tab && isHomeUrl(tab.url)) {
+        showHomeForTab(tabId);
+    } else if (tab && !browserViews.has(tabId)) {
         const view = createBrowserViewForTab(tabId, tab.partition);
-        if (tab.url && tab.url !== 'about:blank') void view.webContents.loadURL(tab.url);
+        if (tab.url) void view.webContents.loadURL(tab.url);
+        showBrowserView(tabId);
+    } else {
+        showBrowserView(tabId);
     }
-    showBrowserView(tabId);
     if (tab) tab.lastActiveAt = Date.now();
     StorageService.save({ tabs: data.tabs, activeTabId: tabId });
     return tabId;
@@ -388,7 +442,7 @@ ipcMain.handle('set-mosaic-view', async (_event, tabId1: string, tabId2: string)
 
 ipcMain.handle('clear-mosaic-view', async (): Promise<void> => {
     splitTabId = null;
-    showBrowserView(activeTabId || '');
+    if (activeTabId) showBrowserView(activeTabId);
 });
 
 ipcMain.handle('get-system-metrics', async (): Promise<any> => getPerformanceSnapshot({
@@ -407,14 +461,21 @@ ipcMain.handle('nuclear-wipe', async (): Promise<void> => {
 });
 
 ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promise<void> => {
-    if (url === 'about:blank') {
-        mainWindow?.webContents.send('switch-to-home');
+    if (isHomeUrl(url)) {
+        const oldView = browserViews.get(tabId);
+        if (oldView) {
+            if (!oldView.webContents.isDestroyed()) oldView.webContents.close();
+            mainWindow?.removeBrowserView(oldView);
+            browserViews.delete(tabId);
+        }
+        showHomeForTab(tabId);
         return;
     }
-    const view = browserViews.get(tabId);
-    if (!view || view.webContents.isDestroyed()) return;
+    let view = browserViews.get(tabId);
+    if (!view || view.webContents.isDestroyed()) view = createBrowserViewForTab(tabId);
+    showBrowserView(tabId);
     let finalUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) finalUrl = 'https://' + url;
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:') && !url.startsWith('data:')) finalUrl = 'https://' + url;
     try {
         if (await isMaliciousUrl(finalUrl)) return;
         void view.webContents.loadURL(finalUrl);
@@ -430,6 +491,7 @@ ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promi
         StorageService.save({ history: data.history });
     } catch (error) {
         console.error(`[Main] Failed to load URL ${url}:`, error);
+        void view.webContents.loadURL(buildErrorPage(finalUrl, 'The browser could not start this navigation.'));
     }
 });
 
@@ -456,22 +518,39 @@ ipcMain.handle('rename-tab', async (_event, tabId: string, title: string): Promi
 
 ipcMain.handle('close-tab', async (_event, tabId: string): Promise<void> => {
     const view = browserViews.get(tabId);
-    if (!view) return;
-    if (!view.webContents.isDestroyed()) view.webContents.close();
-    mainWindow?.removeBrowserView(view);
-    browserViews.delete(tabId);
+    if (view) {
+        if (!view.webContents.isDestroyed()) view.webContents.close();
+        mainWindow?.removeBrowserView(view);
+        browserViews.delete(tabId);
+    }
     const data = StorageService.load();
     data.tabs = data.tabs.filter(t => t.id !== tabId);
     StorageService.save({ tabs: data.tabs });
-    if (activeTabId === tabId && browserViews.size > 0) showBrowserView(Array.from(browserViews.keys())[0]);
+    if (activeTabId === tabId) {
+        const nextTab = data.tabs[data.tabs.length - 1];
+        if (nextTab) {
+            if (isHomeUrl(nextTab.url)) showHomeForTab(nextTab.id);
+            else showBrowserView(nextTab.id);
+        } else {
+            showHomeForTab();
+        }
+    }
 });
 
 ipcMain.handle('toggle-sidebar', async (): Promise<void> => updateBrowserViewBounds());
 
 ipcMain.handle('navigate-to', async (_event, url: string): Promise<string | null> => {
     if (!mainWindow) return null;
+    if (isHomeUrl(url)) {
+        const tabId = Date.now().toString();
+        const data = StorageService.load();
+        data.tabs.push({ id: tabId, type: 'browser', title: 'New Tab', url: 'about:blank', lastActiveAt: Date.now() });
+        StorageService.save({ tabs: data.tabs, activeTabId: tabId });
+        showHomeForTab(tabId);
+        return tabId;
+    }
     let finalUrl = url;
-    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) finalUrl = 'https://' + url;
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:') && !url.startsWith('data:')) finalUrl = 'https://' + url;
     if (await isMaliciousUrl(finalUrl)) return null;
     const tabId = Date.now().toString();
     const view = createBrowserViewForTab(tabId);
