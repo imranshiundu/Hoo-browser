@@ -8,6 +8,7 @@
     background: #0b0b0b;
     border-bottom: 1px solid #242424;
     z-index: 100;
+    position: relative;
 }
 
 .nav-btn {
@@ -20,6 +21,7 @@
     color: rgba(255, 255, 255, 0.68);
     border-radius: 6px;
     cursor: pointer;
+    flex: 0 0 auto;
 }
 
 .nav-btn:hover {
@@ -27,9 +29,13 @@
     color: #ffffff;
 }
 
+.shield-on svg {
+    color: #00d46a;
+}
+
 .address-form {
     flex: 1;
-    min-width: 0;
+    min-width: 160px;
     height: 32px;
     display: flex;
     align-items: center;
@@ -71,4 +77,66 @@
 
 .address-input::placeholder {
     color: rgba(255, 255, 255, 0.46);
+}
+
+.nav-menu-wrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.bookmarks-popover {
+    position: absolute;
+    top: 38px;
+    right: 0;
+    width: 320px;
+    max-height: 420px;
+    overflow: auto;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 18, 18, 0.98);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.bookmarks-popover strong {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.86);
+    padding: 4px 6px 8px;
+}
+
+.bookmarks-popover button {
+    min-width: 0;
+    border: 0;
+    border-radius: 8px;
+    padding: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.84);
+    text-align: left;
+    cursor: pointer;
+}
+
+.bookmarks-popover button:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.bookmarks-popover span,
+.bookmarks-popover small {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.bookmarks-popover span {
+    font-size: 13px;
+}
+
+.bookmarks-popover small,
+.empty-bookmarks {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
 }
