@@ -1,17 +1,56 @@
 {
-  "name": "zen-browser",
-  "version": "1.0.0",
-  "description": "",
+  "name": "hoo-browser",
+  "productName": "Hoo Browser",
+  "version": "0.1.0",
+  "description": "A DuckDuckGo-first desktop browser experiment with owl-led UX, practical privacy controls, Linux web-app compatibility, and local-first AI assistance.",
   "main": "dist/main/main.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
-    "dev": "webpack --config webpack.config.js --watch",
-    "start": "electron . --no-sandbox",
-    "dev:start": "npm run build && npm run start"
+    "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
+    "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
+    "start": "electron .",
+    "start:unsafe-no-sandbox": "electron . --no-sandbox",
+    "dev:start": "npm run build && npm run start",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run build",
+    "dist": "npm run build:prod && electron-builder --linux AppImage deb --x64",
+    "dist:appimage": "npm run build:prod && electron-builder --linux AppImage --x64",
+    "dist:deb": "npm run build:prod && electron-builder --linux deb --x64"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "electron",
+    "browser",
+    "duckduckgo",
+    "privacy",
+    "linux",
+    "desktop-app",
+    "owl"
+  ],
+  "author": "Imran Shiundu",
+  "license": "MIT",
+  "build": {
+    "appId": "africa.hoo.browser",
+    "productName": "Hoo Browser",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "desktop": {
+        "Name": "Hoo Browser",
+        "Comment": "DuckDuckGo-first browser with isolated web apps",
+        "Categories": "Network;WebBrowser;"
+      }
+    }
+  },
   "devDependencies": {
     "@types/electron": "^1.4.38",
     "@types/node": "^25.2.0",
