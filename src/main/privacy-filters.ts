@@ -12,7 +12,15 @@ export const adBlockRules = [
     'ads.youtube.com',
     'youtube.com/api/stats/ads',
     'youtube.com/pagead/',
+    'youtube.com/get_midroll_',
+    'youtube.com/ptracking',
+    'youtube.com/youtubei/v1/log_event',
+    'youtube.com/youtubei/v1/player/ad_break',
+    'youtube.com/api/stats/qoe',
+    'youtube.com/api/stats/playback',
+    'youtube.com/api/stats/watchtime',
     'googlevideo.com/videoplayback/id/ad',
+    'googlevideo.com/videoplayback?oad=',
     'facebook.com/tr',
     'scorecardresearch.com',
     'quantserve.com',
@@ -47,6 +55,11 @@ export const adBlockRules = [
     'trafficjunky.net',
     'exoclick.com',
     'juicyads.com',
+    'adsterra.com',
+    'adsterra.org',
+    'hilltopads.net',
+    'realsrv.com',
+    'onclickalgo.com',
 ];
 
 export const trackerBlockRules = [
@@ -61,6 +74,10 @@ export const trackerBlockRules = [
     '/ptracking?',
     '/api/stats/ads',
     '/api/stats/qoe',
+    '/api/stats/playback',
+    '/api/stats/watchtime',
+    '/youtubei/v1/log_event',
+    '/youtubei/v1/player/ad_break',
     '/pagead/',
     '/pcs/activeview',
     'adformat=',
@@ -72,6 +89,8 @@ export const trackerBlockRules = [
     'redirect?',
     'popunder',
     'onclick',
+    'premium-promo',
+    'yt_mealbar',
 ];
 
 export const hardBlockedHosts = [
@@ -85,6 +104,11 @@ export const hardBlockedHosts = [
     'trafficjunky.net',
     'exoclick.com',
     'juicyads.com',
+    'adsterra.com',
+    'adsterra.org',
+    'hilltopads.net',
+    'realsrv.com',
+    'onclickalgo.com',
 ];
 
 const adBlockSet = new Set(adBlockRules);
@@ -125,7 +149,7 @@ export function isLikelyForcedRedirect(targetUrl: string, sourceUrl?: string): b
         if (target.hostname.endsWith(`.${source.hostname}`) || source.hostname.endsWith(`.${target.hostname}`)) return false;
         if (isHardBlockedHost(targetUrl)) return true;
         const targetLower = targetUrl.toLowerCase();
-        return ['torrent', 'vpn', 'hide-my-ip', 'adult', 'casino', 'bet', 'claim', 'prize', 'download-now'].some(signal => targetLower.includes(signal));
+        return ['torrent', 'vpn', 'hide-my-ip', 'adult', 'casino', 'bet', 'claim', 'prize', 'download-now', 'verify-human', 'allow-notifications'].some(signal => targetLower.includes(signal));
     } catch {
         return false;
     }
