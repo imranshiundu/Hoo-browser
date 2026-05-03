@@ -1,57 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import './Home.css';
-import { Search, Lock, Github, MessageSquare, Mail, Video, Newspaper, Shield, Globe2, KeyRound, Plus } from 'lucide-react';
+import { Search, Github, MessageSquare, Mail, Video, Newspaper, Settings } from 'lucide-react';
 
 const hooIcon = require('../assets/branding/hoo-app-icon.svg');
 const hooWallpaper = require('../assets/branding/hoo-wallpaper.svg');
 
-const Home: React.FC = () => {
-    const [time, setTime] = useState(new Date());
-    const [searchQuery, setSearchQuery] = useState('');
-    const [activeEngine, setActiveEngine] = useState('duckduckgo');
+interface HomeProps {
+    onNavigate?: (url: string) => void;
+    onOpenSettings?: () => void;
+}
 
-    useEffect(() => {
-        const timer = setInterval(() => setTime(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
+const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const toUrl = (value: string) => {
+        const query = value.trim();
+        if (!query) return '';
+        if (query.match(/^https?:\/\//)) return query;
+        if (query.includes('.') && !query.includes(' ')) return `https://${query}`;
+        return `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+    };
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!searchQuery.trim()) return;
-
-        let url = '';
-        const query = searchQuery.trim();
-
-        if (query.match(/^https?:\/\//)) {
-            url = query;
-        } else if (query.includes('.') && !query.includes(' ')) {
-            url = 'https://' + query;
-        } else {
-            switch (activeEngine) {
-                case 'startpage':
-                    url = `https://www.startpage.com/search?q=${encodeURIComponent(query)}`;
-                    break;
-                case 'qwant':
-                    url = `https://www.qwant.com/?q=${encodeURIComponent(query)}`;
-                    break;
-                case 'google':
-                    url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-                    break;
-                default:
-                    url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-            }
-        }
-
-        if (window.electronAPI?.navigateTo) {
-            window.electronAPI.navigateTo(url);
-        }
-    };
-
-    const getGreeting = () => {
-        const hour = time.getHours();
-        if (hour < 12) return "Good morning. Hoo's got your back.";
-        if (hour < 18) return "Good afternoon. Hoo's watching the web with you.";
-        return 'Good evening. Night mode suits an owl.';
+        const url = toUrl(searchQuery);
+        if (!url) return;
+        if (onNavigate) onNavigate(url);
+        else window.electronAPI?.navigateTo?.(url);
     };
 
     const speedDialLinks = [
@@ -63,89 +38,46 @@ const Home: React.FC = () => {
     ];
 
     const handleSpeedDialClick = (url: string) => {
-        if (window.electronAPI?.navigateTo) {
-            window.electronAPI.navigateTo(url);
-        }
-    };
-
-    const getEngineIcon = () => {
-        switch (activeEngine) {
-            case 'duckduckgo': return <Shield size={18} />;
-            case 'startpage': return <Lock size={18} />;
-            case 'qwant': return <Globe2 size={18} />;
-            default: return <Search size={18} />;
-        }
+        if (onNavigate) onNavigate(url);
+        else window.electronAPI?.navigateTo?.(url);
     };
 
     return (
         <div className="home-container" style={{ backgroundImage: `url(${hooWallpaper.default || hooWallpaper})` }}>
-            <div className="home-vignette" />
-            <div className="home-content animate-fade-in">
-                <div className="brand-lockup">
-                    <img src={hooIcon.default || hooIcon} alt="Hoo Browser owl icon" className="brand-icon" />
-                    <div className="brand-wordmark" aria-label="Hoo Browser">
-                        <span className="brand-hoo">Hoo</span><span className="brand-browser">Browser</span>
-                    </div>
+            <div className="home-shade" />
+            <button className="home-settings" type="button" onClick={onOpenSettings} aria-label="Open settings">
+                <Settings size={18} />
+            </button>
+
+            <main className="home-center">
+                <div className="home-brand">
+                    <img src={hooIcon.default || hooIcon} alt="Hoo Browser" />
+                    <span><strong>Hoo</strong> Browser</span>
                 </div>
 
-                <div className="product-pill">
-                    <Shield size={14} />
-                    <span>OWL-GUIDED · PRIVACY-FIRST · WEB FREEDOM</span>
-                </div>
+                <form onSubmit={handleSearch} className="home-search">
+                    <Search size={19} />
+                    <input
+                        type="text"
+                        placeholder="Search with DuckDuckGo or enter address"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        autoFocus
+                    />
+                </form>
 
-                <section className="hero-copy">
-                    <div className="time">{time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
-                    <p className="greeting">{getGreeting()}</p>
-                    <h1>Private search. No tracking. Just results.</h1>
-                    <p className="hero-subtitle">
-                        Hoo is a DuckDuckGo-first desktop browser for isolated web apps, practical protection, calm navigation, and Linux-first freedom.
-                    </p>
-                </section>
-
-                <div className="search-stack">
-                    <form onSubmit={handleSearch} className="search-container">
-                        <div className="search-engine-preview">{getEngineIcon()}</div>
-                        <input
-                            type="text"
-                            placeholder="Search with DuckDuckGo or enter an address"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="search-input"
-                            autoFocus
-                        />
-                        <button type="submit" className="search-submit" aria-label="Search or navigate">›</button>
-                    </form>
-
-                    <div className="engine-selectors" aria-label="Search engine selector">
-                        <button className={activeEngine === 'duckduckgo' ? 'active primary-engine' : ''} onClick={() => setActiveEngine('duckduckgo')}>DuckDuckGo</button>
-                        <button className={activeEngine === 'startpage' ? 'active' : ''} onClick={() => setActiveEngine('startpage')}>Startpage</button>
-                        <button className={activeEngine === 'qwant' ? 'active' : ''} onClick={() => setActiveEngine('qwant')}>Qwant</button>
-                        <button className={activeEngine === 'google' ? 'active fallback-engine' : 'fallback-engine'} onClick={() => setActiveEngine('google')}>Google fallback</button>
-                    </div>
-                </div>
-
-                <div className="speed-dial">
+                <div className="speed-dial" aria-label="Quick links">
                     {speedDialLinks.map((link) => {
                         const IconComponent = link.icon;
                         return (
                             <button key={link.label} onClick={() => handleSpeedDialClick(link.url)} className="speed-dial-item">
-                                <div className="speed-dial-icon"><IconComponent size={22} /></div>
+                                <span className="speed-dial-icon"><IconComponent size={22} /></span>
                                 <span className="speed-dial-label">{link.label}</span>
                             </button>
                         );
                     })}
-                    <button className="speed-dial-item add-app" type="button">
-                        <div className="speed-dial-icon"><Plus size={24} /></div>
-                        <span className="speed-dial-label">Add App</span>
-                    </button>
                 </div>
-            </div>
-
-            <div className="home-footer">
-                <span><Shield size={16} /> DuckDuckGo-first</span>
-                <span><KeyRound size={16} /> Website protection</span>
-                <span><Globe2 size={16} /> Linux-first</span>
-            </div>
+            </main>
         </div>
     );
 };
