@@ -3,7 +3,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
 import { exec } from "child_process";
-import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders } from "./privacy-filters";
+import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders, isLikelyForcedRedirect, isHardBlockedHost } from "./privacy-filters";
 import { StorageService } from "./storage";
 import { setupAuthHandlers } from "./auth";
 import { MegaSyncService } from "./sync";
@@ -91,8 +91,23 @@ function buildErrorPage(url: string, description: string): string {
     return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#080a0a;color:#f3f4f6;font-family:Inter,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.card{width:min(680px,calc(100vw - 48px));border:1px solid rgba(255,102,0,.32);border-radius:22px;padding:34px;background:linear-gradient(135deg,rgba(255,102,0,.12),rgba(255,255,255,.035));box-shadow:0 24px 80px rgba(0,0,0,.45)}h1{margin:0 0 10px;font-size:28px}p{color:#b7bbc2;line-height:1.6}.url{margin-top:18px;font-size:13px;color:#f97316;word-break:break-all}.hint{margin-top:18px;font-size:13px;color:#9ca3af}</style></head><body><section class="card"><h1>Hoo could not open this page</h1><p>${decodeURIComponent(safeMessage)}</p><div class="url">${decodeURIComponent(safeUrl)}</div><div class="hint">Check your connection, reload, or open a new tab. Hoo kept the browser UI alive instead of leaving a blank page.</div></section></body></html>`)}`;
 }
 
+function buildBlockedPage(url: string, reason: string): string {
+    return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#050505;color:#fff;font-family:Inter,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.card{width:min(720px,calc(100vw - 48px));border:1px solid rgba(34,197,94,.35);border-radius:22px;padding:34px;background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(255,102,0,.08));box-shadow:0 24px 80px rgba(0,0,0,.5)}h1{margin:0 0 10px;font-size:28px}.tag{display:inline-block;margin-bottom:16px;padding:8px 12px;border-radius:999px;background:rgba(34,197,94,.14);color:#86efac;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.12em}p{color:#cbd5e1;line-height:1.6}.url{margin-top:18px;font-size:13px;color:#fb923c;word-break:break-all}</style></head><body><section class="card"><div class="tag">Hoo Shield</div><h1>Blocked an unwanted redirect</h1><p>${reason}</p><div class="url">${url}</div></section></body></html>`)}`;
+}
+
+function blockNavigationIfUnsafe(tabId: string, view: BrowserView, event: Electron.Event, targetUrl: string, sourceUrl?: string): boolean {
+    if (isHardBlockedHost(targetUrl) || isLikelyForcedRedirect(targetUrl, sourceUrl || view.webContents.getURL())) {
+        event.preventDefault();
+        mainWindow?.webContents.send('tab-loading-state', tabId, false, view.webContents.getURL());
+        void view.webContents.loadURL(buildBlockedPage(targetUrl, 'A page tried to push you to another site that looks like a popup, scam, torrent/VPN advert, or forced redirect. Hoo stopped it instead of letting it open a new window.'));
+        return true;
+    }
+    return false;
+}
+
 function injectSitePolish(view: BrowserView): void {
     try {
+        const url = view.webContents.getURL();
         const css = `
             html, body { scrollbar-width: thin !important; }
             ::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
@@ -100,8 +115,32 @@ function injectSitePolish(view: BrowserView): void {
             ::-webkit-scrollbar-thumb { background: rgba(140,140,140,.28) !important; border-radius: 999px !important; }
             ::-webkit-scrollbar-thumb:hover { background: rgba(180,180,180,.42) !important; }
             form[role="search"], [data-testid="searchbox"], .searchbox_searchbox__eaWKL { max-width: 820px !important; }
+            ${url.includes('youtube.com') ? `
+                ytd-comments, ytd-item-section-renderer#sections, ytd-watch-next-secondary-results-renderer,
+                ytd-rich-section-renderer, ytd-reel-shelf-renderer, ytd-merch-shelf-renderer,
+                ytd-promoted-sparkles-web-renderer, ytd-popup-container, tp-yt-paper-dialog,
+                ytd-mealbar-promo-renderer, ytd-companion-slot-renderer, ytd-ad-slot-renderer,
+                .ytp-ce-element, .ytp-paid-content-overlay, #masthead-ad, #player-ads,
+                #panels, #secondary, #chat, #related, #offer-module, #clarify-box { display: none !important; }
+                ytd-watch-flexy[flexy] #primary.ytd-watch-flexy { max-width: 1180px !important; margin: 0 auto !important; }
+                ytd-rich-grid-renderer { --ytd-rich-grid-items-per-row: 4 !important; }
+            ` : ''}
         `;
         void Promise.resolve((view.webContents.insertCSS as any)(css)).catch((): undefined => undefined);
+        if (url.includes('youtube.com')) {
+            void view.webContents.executeJavaScript(`
+                (() => {
+                    try {
+                        const kill = () => {
+                            document.querySelectorAll('video').forEach(v => { v.autoplay = false; });
+                            document.querySelectorAll('ytd-comments,#comments,#secondary,#related,ytd-watch-next-secondary-results-renderer,ytd-reel-shelf-renderer,ytd-rich-section-renderer,ytd-popup-container,tp-yt-paper-dialog,ytd-mealbar-promo-renderer,ytd-ad-slot-renderer,#player-ads,#masthead-ad,#chat').forEach(el => el.remove());
+                        };
+                        kill();
+                        new MutationObserver(kill).observe(document.documentElement, { childList: true, subtree: true });
+                    } catch (_) {}
+                })();
+            `).catch((): undefined => undefined);
+        }
     } catch {
         // Site CSS injection is cosmetic; never break page loading for it.
     }
@@ -110,6 +149,19 @@ function injectSitePolish(view: BrowserView): void {
 function attachViewHandlers(tabId: string, view: BrowserView): void {
     view.setAutoResize({ width: true, height: true });
     view.webContents.setBackgroundThrottling(false);
+
+    view.webContents.setWindowOpenHandler((details): Electron.HandlerDetails => {
+        const sourceUrl = view.webContents.getURL();
+        if (isHardBlockedHost(details.url) || isLikelyForcedRedirect(details.url, sourceUrl)) {
+            void view.webContents.loadURL(buildBlockedPage(details.url, 'A site tried to open an unwanted popup/new window. Hoo blocked it and kept you on the current tab.'));
+            return { action: 'deny' };
+        }
+        if (details.disposition === 'foreground-tab' || details.disposition === 'background-tab' || details.disposition === 'new-window') {
+            mainWindow?.webContents.send('open-url-in-new-tab', details.url);
+            return { action: 'deny' };
+        }
+        return { action: 'deny' };
+    });
 
     view.webContents.session.setPermissionRequestHandler((webContents, permission, callback): void => {
         const url = webContents.getURL();
@@ -121,7 +173,12 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
         callback(false);
     });
 
-    view.webContents.on('did-start-navigation', (_event, url): void => {
+    view.webContents.on('will-navigate', (event, targetUrl): void => {
+        blockNavigationIfUnsafe(tabId, view, event, targetUrl);
+    });
+
+    view.webContents.on('did-start-navigation', (event, url, isInPlace, isMainFrame): void => {
+        if (isMainFrame && !isInPlace && blockNavigationIfUnsafe(tabId, view, event, url)) return;
         mainWindow?.webContents.send('tab-loading-state', tabId, true, url);
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com')) {
             view.webContents.setUserAgent(WHATSAPP_UA);
@@ -274,7 +331,7 @@ function applyPrivacyToSession(ses: Electron.Session): void {
         trackNetworkRequest();
         const lowDataDecision = shouldBlockForLowData(details.url, details.resourceType, privacySettings);
         if (lowDataDecision.block) return callback({ cancel: true });
-        if (privacySettings.adShield && shouldBlockRequest(details.url)) return callback({ cancel: true });
+        if (privacySettings.adShield && shouldBlockRequest(details.url, details.resourceType)) return callback({ cancel: true });
         if (privacySettings.forceHttps && details.url.startsWith('http://')) return callback({ redirectURL: details.url.replace('http://', 'https://') });
         callback({ cancel: false });
     });
@@ -477,7 +534,10 @@ ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promi
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:') && !url.startsWith('data:')) finalUrl = 'https://' + url;
     try {
-        if (await isMaliciousUrl(finalUrl)) return;
+        if (await isMaliciousUrl(finalUrl)) {
+            void view.webContents.loadURL(buildBlockedPage(finalUrl, 'This URL matched Hoo Shield malware/scam rules.'));
+            return;
+        }
         void view.webContents.loadURL(finalUrl);
         const stData = StorageService.load();
         const tab = stData.tabs.find(t => t.id === tabId);
