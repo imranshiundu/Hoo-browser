@@ -8,9 +8,11 @@ BRANCH="${HOO_BRANCH:-main}"
 INSTALL_DIR="${HOO_INSTALL_DIR:-$HOME/.local/share/hoo-browser}"
 BIN_DIR="$HOME/.local/bin"
 DESKTOP_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 LAUNCHER="$BIN_DIR/hoo-browser"
 DESKTOP_FILE="$DESKTOP_DIR/hoo-browser.desktop"
+ICON_FILE="$ICON_DIR/hoo-browser.svg"
 UPDATE_SCRIPT="$INSTALL_DIR/scripts/update-hoo.sh"
 SERVICE_FILE="$SYSTEMD_DIR/hoo-browser-update.service"
 TIMER_FILE="$SYSTEMD_DIR/hoo-browser-update.timer"
@@ -23,10 +25,7 @@ warn() { printf '\033[1;33m[Hoo warning]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[Hoo error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 need_command() { command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"; }
-
-human_size() {
-  du -sh "$1" 2>/dev/null | awk '{print $1}' || printf 'unknown'
-}
+human_size() { du -sh "$1" 2>/dev/null | awk '{print $1}' || printf 'unknown'; }
 
 ensure_linux_desktop() {
   if [[ "${OSTYPE:-}" != linux* ]]; then
@@ -35,6 +34,7 @@ ensure_linux_desktop() {
 }
 
 install_system_packages_hint() {
+  warn "Source install currently downloads Electron/build dependencies and can use 700MB+. User-ready AppImage/deb release builds are the next packaging target."
   if command -v apt >/dev/null 2>&1; then
     warn "If installation fails because Node.js/npm/git is missing, run: sudo apt update && sudo apt install -y git nodejs npm"
   elif command -v dnf >/dev/null 2>&1; then
@@ -48,6 +48,7 @@ clone_or_update_repo() {
   mkdir -p "$(dirname "$INSTALL_DIR")"
   if [[ -d "$INSTALL_DIR/.git" ]]; then
     info "Existing installation found at $INSTALL_DIR"
+    git -C "$INSTALL_DIR" reset --hard HEAD
     git -C "$INSTALL_DIR" fetch --progress origin "$BRANCH"
     git -C "$INSTALL_DIR" checkout "$BRANCH"
     git -C "$INSTALL_DIR" pull --ff-only --progress origin "$BRANCH"
@@ -70,15 +71,10 @@ install_dependencies() {
   info "node_modules size: $(human_size "$INSTALL_DIR/node_modules")"
 }
 
-build_app() {
-  cd "$INSTALL_DIR"
-  npm run build
-}
+build_app() { cd "$INSTALL_DIR" && npm run build; }
 
 cleanup_after_build() {
-  if [[ "$KEEP_NPM_CACHE" != "1" ]]; then
-    rm -rf "$NPM_CACHE_DIR" || true
-  fi
+  if [[ "$KEEP_NPM_CACHE" != "1" ]]; then rm -rf "$NPM_CACHE_DIR" || true; fi
   find "$INSTALL_DIR" -type d -name .cache -prune -exec rm -rf {} + 2>/dev/null || true
   info "Final install size: $(human_size "$INSTALL_DIR")"
 }
@@ -95,6 +91,17 @@ EOF
   info "Launcher installed at $LAUNCHER"
 }
 
+write_icon() {
+  mkdir -p "$ICON_DIR"
+  if [[ -f "$INSTALL_DIR/src/renderer/assets/branding/hoo-app-icon.svg" ]]; then
+    cp "$INSTALL_DIR/src/renderer/assets/branding/hoo-app-icon.svg" "$ICON_FILE"
+    chmod 644 "$ICON_FILE"
+    info "Hoo owl icon installed at $ICON_FILE"
+  else
+    warn "Hoo icon asset was not found. Desktop entry will fall back to theme icon."
+  fi
+}
+
 write_desktop_entry() {
   mkdir -p "$DESKTOP_DIR"
   cat > "$DESKTOP_FILE" <<EOF
@@ -109,17 +116,13 @@ Type=Application
 Categories=Network;WebBrowser;
 StartupNotify=true
 StartupWMClass=Hoo Browser
-Icon=web-browser
+Icon=hoo-browser
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
 Keywords=browser;web;duckduckgo;privacy;hoo;owl;
 EOF
   chmod 644 "$DESKTOP_FILE"
-  if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
-  fi
-  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-    gtk-update-icon-cache "$HOME/.local/share/icons" >/dev/null 2>&1 || true
-  fi
+  if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true; fi
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true; fi
   info "Desktop entry installed at $DESKTOP_FILE"
 }
 
@@ -163,23 +166,13 @@ EOF
 main() {
   ensure_linux_desktop
   install_system_packages_hint
-  step 1 "Checking required tools"
-  need_command git
-  need_command npm
-  need_command node
-  step 2 "Downloading Hoo source"
-  clone_or_update_repo
-  step 3 "Installing production build dependencies"
-  install_dependencies
-  step 4 "Building Hoo Browser"
-  build_app
-  step 5 "Cleaning temporary install cache"
-  cleanup_after_build
-  step 6 "Creating launcher and app menu entry"
-  write_launcher
-  write_desktop_entry
-  step 7 "Installing 7-day update timer"
-  write_update_timer
+  step 1 "Checking required tools"; need_command git; need_command npm; need_command node
+  step 2 "Downloading Hoo source"; clone_or_update_repo
+  step 3 "Installing build dependencies"; install_dependencies
+  step 4 "Building Hoo Browser"; build_app
+  step 5 "Cleaning temporary install cache"; cleanup_after_build
+  step 6 "Creating launcher, icon, and app menu entry"; write_launcher; write_icon; write_desktop_entry
+  step 7 "Installing 7-day update timer"; write_update_timer
   info "Installation complete. Start Hoo Browser from your app launcher or run: hoo-browser"
   info "If the app list does not refresh immediately, log out/in or run: update-desktop-database $DESKTOP_DIR"
 }
