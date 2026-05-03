@@ -7,15 +7,20 @@ interface SettingsModalProps {
     onClose: () => void;
 }
 
+type UpdateState = {
+    status: 'idle' | 'checking' | 'success' | 'failed';
+    message: string;
+};
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [adShield, setAdShield] = React.useState(true);
     const [fingerprintCloak, setFingerprintCloak] = React.useState(true);
     const [forceHttps, setForceHttps] = React.useState(true);
-    const [retention, setRetention] = React.useState('forever');
-    const [updateState, setUpdateState] = React.useState<{ status: string; message: string } | null>(null);
+    const [retention, setRetention] = React.useState<PrivacySettings['dataRetention']>('forever');
+    const [updateState, setUpdateState] = React.useState<UpdateState | null>(null);
 
     React.useEffect(() => {
-        const loadSettings = async () => {
+        const loadSettings = async (): Promise<void> => {
             const data = await window.electronAPI?.getInitialData?.();
             const settings = data?.settings;
             if (!settings) return;
@@ -24,24 +29,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setForceHttps(settings.forceHttps ?? true);
             setRetention(settings.dataRetention || 'forever');
         };
-        if (isOpen) loadSettings();
+        if (isOpen) void loadSettings();
     }, [isOpen]);
 
-    const updatePrivacy = (next: Record<string, unknown>) => {
-        window.electronAPI?.updatePrivacySettings?.(next);
+    const updatePrivacy = (next: PrivacySettings): void => {
+        void window.electronAPI?.updatePrivacySettings?.(next);
     };
 
-    const checkForUpdates = async () => {
+    const checkForUpdates = async (): Promise<void> => {
         setUpdateState({ status: 'checking', message: 'Checking GitHub for Hoo Browser updates…' });
         try {
-            const result = await window.electronAPI?.runUpdater?.();
+            const result = await window.electronAPI?.checkForUpdates?.();
             if (!result) {
                 setUpdateState({ status: 'failed', message: 'Updater is not available in this build yet.' });
                 return;
             }
-            setUpdateState({ status: result.success ? 'success' : 'failed', message: result.message || result.output || 'Update command finished.' });
-        } catch (error: any) {
-            setUpdateState({ status: 'failed', message: error?.message || 'Update failed.' });
+            setUpdateState({ status: result.ok ? 'success' : 'failed', message: result.message || result.details || 'Update command finished.' });
+        } catch (error: unknown) {
+            setUpdateState({ status: 'failed', message: error instanceof Error ? error.message : 'Update failed.' });
         }
     };
 
@@ -79,7 +84,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                         <h3>Data</h3>
                         <label className="setting-row">
                             <span>History retention</span>
-                            <select value={retention} onChange={(e) => { setRetention(e.target.value); updatePrivacy({ dataRetention: e.target.value }); }}>
+                            <select value={retention} onChange={(e) => { const value = e.target.value as PrivacySettings['dataRetention']; setRetention(value); updatePrivacy({ dataRetention: value }); }}>
                                 <option value="forever">Forever</option>
                                 <option value="30d">30 days</option>
                                 <option value="7d">7 days</option>
@@ -87,7 +92,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                             </select>
                         </label>
                         <button className="danger-button" onClick={() => {
-                            if (confirm('Delete all Hoo Browser data? This cannot be undone.')) window.electronAPI?.nuclearWipe?.();
+                            if (confirm('Delete all Hoo Browser data? This cannot be undone.')) void window.electronAPI?.nuclearWipe?.();
                         }}>
                             <Trash2 size={16} /> Clear all browser data
                         </button>
@@ -95,7 +100,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
                     <section className="settings-section">
                         <h3>Updates</h3>
-                        <button className="primary-button" onClick={checkForUpdates}>
+                        <button className="primary-button" onClick={() => void checkForUpdates()}>
                             <RotateCw size={16} /> Check for updates
                         </button>
                         {updateState && <p className={`update-message ${updateState.status}`}>{updateState.message}</p>}
