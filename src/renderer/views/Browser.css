@@ -28,6 +28,21 @@
     z-index: 0;
 }
 
+.split-screen-gutter {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 8px;
+    transform: translateX(-4px);
+    background: linear-gradient(180deg, rgba(255,106,0,.55), rgba(255,255,255,.08), rgba(255,106,0,.35));
+    border-left: 1px solid rgba(0,0,0,.55);
+    border-right: 1px solid rgba(0,0,0,.55);
+    box-shadow: 0 0 22px rgba(255,106,0,.16);
+    z-index: 3;
+    pointer-events: none;
+}
+
 .browser-view-container::before,
 .browser-view-container::after {
     content: none !important;
