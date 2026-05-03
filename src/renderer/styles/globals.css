@@ -3,20 +3,20 @@
 
 /* Global CSS Variables & Reset */
 :root {
-  /* Color Palette - Deeper, Sleeker Dark/Green Theme */
+  /* Hoo browser shell palette */
   --bg-primary: #050706;
   --bg-secondary: rgba(13, 19, 16, 0.7);
   --bg-tertiary: rgba(26, 38, 33, 0.4);
   --bg-glass: rgba(13, 19, 16, 0.6);
-  --bg-accent: rgba(46, 204, 113, 0.05);
+  --bg-accent: rgba(255, 106, 0, 0.08);
 
   --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-secondary: #b8bec8;
+  --text-muted: #747b86;
 
-  --accent-green: #2ecc71;
-  --accent-green-hover: #27ae60;
-  --accent-green-dim: rgba(46, 204, 113, 0.15);
+  --accent-green: #ff6a00;
+  --accent-green-hover: #ff7a1a;
+  --accent-green-dim: rgba(255, 106, 0, 0.16);
 
   --glass-border: rgba(255, 255, 255, 0.08);
   --border-color: rgba(255, 255, 255, 0.06);
@@ -52,7 +52,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 30px rgba(46, 204, 113, 0.2);
+  --shadow-glow: 0 0 24px rgba(255, 106, 0, 0.18);
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -87,6 +87,41 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Critical browser shell sizing.
+   Without these explicit flex heights the BrowserView host can collapse to
+   the small visible band at the top of pages, leaving the renderer background
+   as a black block over the rest of WhatsApp/DuckDuckGo. */
+.app-shell {
+  width: 100vw;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0b0b0b;
+}
+
+.browser-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0b0b0b;
+}
+
+.browser-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0b0b0b;
 }
 
 /* Glass Utility */
