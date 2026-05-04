@@ -11,6 +11,7 @@
     "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
     "start": "electron . --no-sandbox",
     "start:sandbox": "electron .",
+    "start:auth-trace": "node scripts/run-auth-trace.cjs",
     "dev:start": "npm run build && npm run start",
     "hotfix:stability": "node scripts/apply-hoo-stability-hotfix.cjs",
     "verify:hoo": "node scripts/verify-hoo-local.cjs",
