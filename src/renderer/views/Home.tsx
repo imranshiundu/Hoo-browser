@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './Home.css';
-import { Search, Settings, BookmarkPlus } from 'lucide-react';
+import { Check, Image, Search, Settings, BookmarkPlus } from 'lucide-react';
 import { getFaviconUrl } from '../types';
+import { getWallpaperById, HOO_WALLPAPERS, HOO_WALLPAPER_STORAGE_KEY } from '../assets/wallpapers';
 
 const hooIcon = require('../assets/branding/hoo-app-icon.svg');
 const fallbackWallpaper = require('../assets/branding/hoo-wallpaper.svg');
-const customWallpaperPath = 'assets/branding/hoo-owl-wallpaper.png';
 
 interface HomeProps {
     onNavigate?: (url: string) => void;
@@ -16,18 +16,33 @@ const BOOKMARK_KEY = 'hoo:bookmarks';
 
 const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [wallpaperUrl, setWallpaperUrl] = useState(customWallpaperPath);
+    const [wallpaperId, setWallpaperId] = useState(() => localStorage.getItem(HOO_WALLPAPER_STORAGE_KEY) || 'owl-night');
+    const [imageFallback, setImageFallback] = useState(false);
+    const [wallpapersOpen, setWallpapersOpen] = useState(false);
+
+    const activeWallpaper = getWallpaperById(wallpaperId);
+    const fallbackUrl = fallbackWallpaper.default || fallbackWallpaper;
+    const wallpaperStyle = activeWallpaper.kind === 'image'
+        ? { backgroundImage: `url(${imageFallback ? fallbackUrl : activeWallpaper.value})`, backgroundPosition: activeWallpaper.position || 'center' }
+        : { backgroundImage: activeWallpaper.value };
 
     useEffect(() => {
-        const img = new Image();
-        img.onload = (): void => setWallpaperUrl(customWallpaperPath);
-        img.onerror = (): void => setWallpaperUrl(fallbackWallpaper.default || fallbackWallpaper);
-        img.src = customWallpaperPath;
-    }, []);
+        localStorage.setItem(HOO_WALLPAPER_STORAGE_KEY, wallpaperId);
+        setImageFallback(false);
+    }, [wallpaperId]);
+
+    useEffect(() => {
+        if (activeWallpaper.kind !== 'image') return;
+        const img = new window.Image();
+        img.onload = (): void => setImageFallback(false);
+        img.onerror = (): void => setImageFallback(true);
+        img.src = activeWallpaper.value;
+    }, [activeWallpaper]);
 
     const toUrl = (value: string): string => {
         const query = value.trim();
         if (!query) return '';
+        if (/^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(query)) return query;
         if (query.match(/^https?:\/\//)) return query;
         if (query.includes('.') && !query.includes(' ')) return `https://${query}`;
         return `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
@@ -57,20 +72,56 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
     const addBookmarkFromInput = (): void => {
         const url = toUrl(searchQuery);
         if (!url) return;
-        const hostname = new URL(url).hostname.replace(/^www\./, '');
+        let title = url;
+        try {
+            title = new URL(url).hostname.replace(/^www\./, '');
+        } catch {
+            title = url.slice(0, 48);
+        }
         const existing = JSON.parse(localStorage.getItem(BOOKMARK_KEY) || '[]');
         localStorage.setItem(BOOKMARK_KEY, JSON.stringify([
-            { id: `${Date.now()}`, title: hostname, url, createdAt: Date.now() },
+            { id: `${Date.now()}`, title, url, createdAt: Date.now() },
             ...existing.filter((item: { url: string }) => item.url !== url)
         ].slice(0, 40)));
     };
 
     return (
-        <div className="home-container" style={{ backgroundImage: `url(${wallpaperUrl})` }}>
+        <div className="home-container" style={wallpaperStyle}>
             <div className="home-shade" />
-            <button className="home-settings" type="button" onClick={onOpenSettings} aria-label="Open settings">
-                <Settings size={18} />
-            </button>
+            <div className="home-controls">
+                <button className="home-control-button" type="button" onClick={() => setWallpapersOpen(value => !value)} aria-label="Change wallpaper">
+                    <Image size={18} />
+                </button>
+                <button className="home-control-button" type="button" onClick={onOpenSettings} aria-label="Open settings">
+                    <Settings size={18} />
+                </button>
+            </div>
+
+            {wallpapersOpen && (
+                <aside className="wallpaper-panel">
+                    <header>
+                        <strong>Wallpapers</strong>
+                        <small>Lightweight Hoo backgrounds</small>
+                    </header>
+                    <div className="wallpaper-grid">
+                        {HOO_WALLPAPERS.map((wallpaper) => (
+                            <button
+                                key={wallpaper.id}
+                                type="button"
+                                className={`wallpaper-option ${wallpaper.id === wallpaperId ? 'active' : ''}`}
+                                onClick={() => setWallpaperId(wallpaper.id)}
+                            >
+                                <span
+                                    className="wallpaper-thumb"
+                                    style={{ backgroundImage: wallpaper.kind === 'image' ? `url(${wallpaper.value})` : wallpaper.value, backgroundPosition: wallpaper.position || 'center' }}
+                                />
+                                <span>{wallpaper.name}</span>
+                                {wallpaper.id === wallpaperId && <Check size={14} />}
+                            </button>
+                        ))}
+                    </div>
+                </aside>
+            )}
 
             <main className="home-center">
                 <div className="home-brand">
