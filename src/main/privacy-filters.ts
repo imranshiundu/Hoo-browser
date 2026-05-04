@@ -3,160 +3,43 @@
 export const externalProtocolRules = ['magnet:', 'mailto:', 'tel:', 'sms:', 'bitcoin:', 'ethereum:', 'tg:', 'whatsapp:'];
 
 export const adBlockRules = [
-    'doubleclick.net',
-    'googlesyndication.com',
-    'googleadservices.com',
-    'pagead2.googlesyndication.com',
-    'tpc.googlesyndication.com',
-    'securepubads.g.doubleclick.net',
-    'static.doubleclick.net',
-    'adservice.google.com',
-    'ads.youtube.com',
-    'youtube.com/api/stats/ads',
-    'youtube.com/pagead/',
-    'youtube.com/get_midroll_',
-    'youtube.com/ptracking',
-    'youtube.com/youtubei/v1/log_event',
-    'youtube.com/youtubei/v1/player/ad_break',
-    'youtube.com/api/stats/qoe',
-    'youtube.com/api/stats/playback',
-    'youtube.com/api/stats/watchtime',
-    'googlevideo.com/videoplayback/id/ad',
-    'googlevideo.com/videoplayback?oad=',
-    'facebook.com/tr',
-    'scorecardresearch.com',
-    'quantserve.com',
-    'hotjar.com',
-    'crazyegg.com',
-    'mouseflow.com',
-    'adnxs.com',
-    'adsrvr.org',
-    'advertising.com',
-    'adform.net',
-    'pubmatic.com',
-    'rubiconproject.com',
-    'openx.net',
-    'criteo.com',
-    'outbrain.com',
-    'taboola.com',
-    'doubleverify.com',
-    'iasdirect.com',
-    'moatads.com',
-    'mixpanel.com',
-    'segment.com',
-    'amplitude.com',
-    'heap.io',
-    'fullstory.com',
-    'safety-torrenting.com',
-    'www.safety-torrenting.com',
-    'torrenting.com',
-    'onclickads.net',
-    'popads.net',
-    'popcash.net',
-    'propellerads.com',
-    'pushtraffic.net',
-    'trafficjunky.net',
-    'exoclick.com',
-    'juicyads.com',
-    'adsterra.com',
-    'adsterra.org',
-    'hilltopads.net',
-    'realsrv.com',
-    'onclickalgo.com',
-    'ad-maven.com',
-    'adskeeper.co.uk',
-    'mgid.com',
-    'revcontent.com',
-    'popunder.net',
-    'zeroredirect.com',
-    'onclickperformance.com',
-    'pushwelcome.com',
-    'pushnest.com',
-    'push.house',
-    'trafficfactory.biz',
-    'go2cloud.org',
-    'smartadserver.com',
-    'yieldmo.com',
-    'media.net',
-    'bidswitch.net',
-    'rlcdn.com',
-    'bluekai.com',
-    'casalemedia.com',
-    'sharethrough.com',
-    '3lift.com',
-    'lijit.com',
-    'addthis.com',
+    'doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'pagead2.googlesyndication.com',
+    'tpc.googlesyndication.com', 'securepubads.g.doubleclick.net', 'static.doubleclick.net', 'adservice.google.com',
+    'ads.youtube.com', 'youtube.com/api/stats/ads', 'youtube.com/pagead/', 'youtube.com/get_midroll_',
+    'youtube.com/ptracking', 'youtube.com/youtubei/v1/log_event', 'youtube.com/youtubei/v1/player/ad_break',
+    'youtube.com/api/stats/qoe', 'youtube.com/api/stats/playback', 'youtube.com/api/stats/watchtime',
+    'googlevideo.com/videoplayback/id/ad', 'googlevideo.com/videoplayback?oad=', 'facebook.com/tr',
+    'scorecardresearch.com', 'quantserve.com', 'hotjar.com', 'crazyegg.com', 'mouseflow.com',
+    'adnxs.com', 'adsrvr.org', 'advertising.com', 'adform.net', 'pubmatic.com', 'rubiconproject.com',
+    'openx.net', 'criteo.com', 'outbrain.com', 'taboola.com', 'doubleverify.com', 'iasdirect.com',
+    'moatads.com', 'mixpanel.com', 'segment.com', 'amplitude.com', 'heap.io', 'fullstory.com',
+    'onclickads.net', 'popads.net', 'popcash.net', 'propellerads.com', 'pushtraffic.net', 'trafficjunky.net',
+    'exoclick.com', 'juicyads.com', 'adsterra.com', 'adsterra.org', 'hilltopads.net', 'realsrv.com',
+    'onclickalgo.com', 'ad-maven.com', 'adskeeper.co.uk', 'mgid.com', 'revcontent.com', 'popunder.net',
+    'zeroredirect.com', 'onclickperformance.com', 'pushwelcome.com', 'pushnest.com', 'push.house',
+    'trafficfactory.biz', 'go2cloud.org', 'smartadserver.com', 'yieldmo.com', 'media.net', 'bidswitch.net',
+    'rlcdn.com', 'bluekai.com', 'casalemedia.com', 'sharethrough.com', '3lift.com', 'lijit.com', 'addthis.com',
 ];
 
 export const trackerBlockRules = [
-    '/analytics.',
-    '/tracking.',
-    '/tracker.',
-    '/pixel.',
-    '/beacon.',
-    '/collect?',
-    '/track?',
-    '/event?',
-    '/ptracking?',
-    '/api/stats/ads',
-    '/api/stats/qoe',
-    '/api/stats/playback',
-    '/api/stats/watchtime',
-    '/youtubei/v1/log_event',
-    '/youtubei/v1/player/ad_break',
-    '/pagead/',
-    '/pcs/activeview',
-    'adformat=',
-    'ad_type=',
-    'adunit',
-    'preroll',
-    'midroll',
-    'vast.xml',
-    'redirect?',
-    'popunder',
-    'onclick',
-    'premium-promo',
-    'yt_mealbar',
-    'googleads',
-    'ad_break',
-    'adunit=',
-    'adurl=',
-    'adserver',
-    'interstitial',
-    'popup',
-    'popunder',
-    'push-notification',
-    'allow-notifications',
+    '/analytics.', '/tracking.', '/tracker.', '/pixel.', '/beacon.', '/collect?', '/track?', '/event?',
+    '/ptracking?', '/api/stats/ads', '/api/stats/qoe', '/api/stats/playback', '/api/stats/watchtime',
+    '/youtubei/v1/log_event', '/youtubei/v1/player/ad_break', '/pagead/', '/pcs/activeview',
+    'adformat=', 'ad_type=', 'adunit=', 'adurl=', 'preroll', 'midroll', 'vast.xml', 'googleads', 'ad_break', 'adserver',
 ];
 
 export const hardBlockedHosts = [
-    'safety-torrenting.com',
-    'www.safety-torrenting.com',
-    'torrenting.com',
-    'onclickads.net',
-    'popads.net',
-    'popcash.net',
-    'propellerads.com',
-    'pushtraffic.net',
-    'trafficjunky.net',
-    'exoclick.com',
-    'juicyads.com',
-    'adsterra.com',
-    'adsterra.org',
-    'hilltopads.net',
-    'realsrv.com',
-    'onclickalgo.com',
-    'ad-maven.com',
-    'zeroredirect.com',
-    'onclickperformance.com',
-    'pushwelcome.com',
-    'pushnest.com',
-    'push.house',
+    'safety-torrenting.com', 'www.safety-torrenting.com', 'torrenting.com', 'onclickads.net', 'popads.net',
+    'popcash.net', 'propellerads.com', 'pushtraffic.net', 'trafficjunky.net', 'exoclick.com', 'juicyads.com',
+    'adsterra.com', 'adsterra.org', 'hilltopads.net', 'realsrv.com', 'onclickalgo.com', 'ad-maven.com',
+    'zeroredirect.com', 'onclickperformance.com', 'pushwelcome.com', 'pushnest.com', 'push.house',
 ];
 
 const adBlockSet = new Set(adBlockRules);
 const hardBlockSet = new Set(hardBlockedHosts);
 const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com', 'accounts.google.com'];
+const DOCUMENT_TYPES = new Set(['mainFrame', 'subFrame']);
+const BLOCKABLE_SUBRESOURCE_TYPES = new Set(['script', 'xhr', 'fetch', 'image', 'stylesheet', 'font', 'media', 'websocket', 'ping', 'beacon', 'object']);
 
 export function isExternalProtocol(url: string): boolean {
     const lower = (url || '').trim().toLowerCase();
@@ -199,17 +82,25 @@ export function isLikelyForcedRedirect(targetUrl: string, sourceUrl?: string): b
         if (target.hostname.endsWith(`.${source.hostname}`) || source.hostname.endsWith(`.${target.hostname}`)) return false;
         if (isHardBlockedHost(targetUrl)) return true;
         const targetLower = targetUrl.toLowerCase();
-        return ['torrent', 'vpn', 'hide-my-ip', 'adult', 'casino', 'bet', 'claim', 'prize', 'download-now', 'verify-human', 'allow-notifications', 'popup', 'popunder', 'safety-torrenting'].some(signal => targetLower.includes(signal));
+        return ['safety-torrenting', 'hide-my-ip', 'claim-prize', 'verify-human', 'allow-notifications', 'popunder'].some(signal => targetLower.includes(signal));
     } catch {
         return false;
     }
 }
 
 export function shouldBlockRequest(url: string, resourceType?: string): boolean {
-    const urlLower = url.toLowerCase();
+    const urlLower = (url || '').toLowerCase();
     if (isExternalProtocol(urlLower)) return false;
     if (isSafeHeavyHost(urlLower)) return false;
-    if (resourceType === 'beacon' || resourceType === 'ping') return true;
+
+    const type = resourceType || '';
+
+    // Never cancel normal document/subframe loads from generic ad rules. Cancelling those is what made Hoo
+    // replace real pages with ERR_BLOCKED_BY_CLIENT pages. Popup/new-window blocking still handles scam windows.
+    if (DOCUMENT_TYPES.has(type)) return isHardBlockedHost(urlLower);
+
+    if (type && !BLOCKABLE_SUBRESOURCE_TYPES.has(type)) return false;
+    if (type === 'beacon' || type === 'ping') return true;
     if (isHardBlockedHost(urlLower)) return true;
 
     try {
