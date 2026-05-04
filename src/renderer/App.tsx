@@ -9,14 +9,23 @@ import { Tab } from './types';
 
 const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
 const initialHomeTab = makeHomeTab();
+const PINNED_TABS_KEY = 'hoo:pinned-tabs';
 
 const App: React.FC = () => {
     const [tabs, setTabs] = useState<Tab[]>([initialHomeTab]);
     const [activeTabId, setActiveTabId] = useState<string>(initialHomeTab.id);
     const [splitTabId, setSplitTabId] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+    const [pinnedTabIds, setPinnedTabIds] = useState<string[]>(() => {
+        try { return JSON.parse(localStorage.getItem(PINNED_TABS_KEY) || '[]'); }
+        catch { return []; }
+    });
 
     const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || initialHomeTab;
+
+    useEffect(() => {
+        localStorage.setItem(PINNED_TABS_KEY, JSON.stringify(pinnedTabIds.filter(id => tabs.some(tab => tab.id === id))));
+    }, [pinnedTabIds, tabs]);
 
     const openHomeTab = (): void => {
         const tab = makeHomeTab();
@@ -58,6 +67,7 @@ const App: React.FC = () => {
     const handleCloseTab = async (tabId: string): Promise<void> => {
         const targetTab = tabs.find(t => t.id === tabId);
         if (!targetTab) return;
+        if (pinnedTabIds.includes(tabId)) return;
 
         const tabIndex = tabs.findIndex(t => t.id === tabId);
         const remainingTabs = tabs.filter(t => t.id !== tabId);
@@ -65,6 +75,8 @@ const App: React.FC = () => {
 
         if (targetTab.type === 'browser') await window.electronAPI?.closeTab(tabId);
         else await window.electronAPI?.hideBrowserView?.();
+
+        setPinnedTabIds(prev => prev.filter(id => id !== tabId));
 
         if (!remainingTabs.length) {
             const home = makeHomeTab();
@@ -84,6 +96,49 @@ const App: React.FC = () => {
         }
     };
 
+    const duplicateTab = async (tabId: string): Promise<void> => {
+        const tab = tabs.find(item => item.id === tabId);
+        if (!tab) return;
+        if (tab.type !== 'browser' || !tab.url) {
+            openHomeTab();
+            return;
+        }
+        const newTabId = await window.electronAPI?.navigateTo?.(tab.url);
+        if (!newTabId) return;
+        setTabs(prev => prev.find(t => t.id === newTabId)
+            ? prev
+            : [...prev, { id: newTabId, type: 'browser', title: tab.title || 'Loading...', url: tab.url }]);
+        setActiveTabId(newTabId);
+    };
+
+    const closeOtherTabs = async (tabId: string): Promise<void> => {
+        const keepIds = new Set([tabId, ...pinnedTabIds]);
+        const closing = tabs.filter(tab => !keepIds.has(tab.id));
+        for (const tab of closing) {
+            if (tab.type === 'browser') await window.electronAPI?.closeTab(tab.id);
+        }
+        const nextTabs = tabs.filter(tab => keepIds.has(tab.id));
+        setTabs(nextTabs.length ? nextTabs : [makeHomeTab()]);
+        setSplitTabId(null);
+        await handleSwitchTab(tabId);
+    };
+
+    const closeTabsToRight = async (tabId: string): Promise<void> => {
+        const index = tabs.findIndex(tab => tab.id === tabId);
+        if (index < 0) return;
+        const closing = tabs.slice(index + 1).filter(tab => !pinnedTabIds.includes(tab.id));
+        for (const tab of closing) {
+            if (tab.type === 'browser') await window.electronAPI?.closeTab(tab.id);
+        }
+        const closingIds = new Set(closing.map(tab => tab.id));
+        setTabs(prev => prev.filter(tab => !closingIds.has(tab.id)));
+        if (splitTabId && closingIds.has(splitTabId)) setSplitTabId(null);
+    };
+
+    const togglePinTab = (tabId: string): void => {
+        setPinnedTabIds(prev => prev.includes(tabId) ? prev.filter(id => id !== tabId) : [...prev, tabId]);
+    };
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
             const key = e.key.toLowerCase();
@@ -99,6 +154,10 @@ const App: React.FC = () => {
             if (mod && key === 'w') {
                 e.preventDefault();
                 void handleCloseTab(activeTabId);
+            }
+            if (mod && key === 'd') {
+                e.preventDefault();
+                void duplicateTab(activeTabId);
             }
             if (mod && e.shiftKey && key === 'tab') {
                 e.preventDefault();
@@ -124,7 +183,7 @@ const App: React.FC = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [settingsOpen, tabs, activeTabId, splitTabId]);
+    }, [settingsOpen, tabs, activeTabId, splitTabId, pinnedTabIds]);
 
     useEffect(() => {
         if (settingsOpen) {
@@ -184,10 +243,15 @@ const App: React.FC = () => {
                     tabs={tabs}
                     activeTabId={activeTabId}
                     splitTabId={splitTabId}
+                    pinnedTabIds={pinnedTabIds}
                     onSwitchTab={(id): void => { void handleSwitchTab(id); }}
                     onSplitTab={(id): void => { void handleSplitTab(id); }}
                     onCloseTab={(id): void => { void handleCloseTab(id); }}
                     onCreateTab={openHomeTab}
+                    onDuplicateTab={(id): void => { void duplicateTab(id); }}
+                    onCloseOtherTabs={(id): void => { void closeOtherTabs(id); }}
+                    onCloseTabsToRight={(id): void => { void closeTabsToRight(id); }}
+                    onTogglePinTab={togglePinTab}
                 />
                 <section className="browser-stage">
                     {activeTab.type === 'browser' ? (
