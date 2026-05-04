@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 /*
- * Hoo stability hotfix
- * Applies only the main-process fixes that are not yet safely merged into main.ts:
- * - blocked ad frames should not become full error pages
- * - magnet/mailto/tel links should open externally
- * - popup-created BrowserWindows should be denied
- * - the technical error page should become a clean Hoo owl page
+ * Hoo stability + auth compatibility hotfix
  *
- * Important: this script intentionally does NOT edit privacy-filters.ts anymore.
- * The privacy filter file now receives normal repo patches, including WhatsApp/Google auth compatibility.
+ * This exists because the BrowserView main-process file is still being stabilized.
+ * It is intentionally idempotent: running it before every build should not keep
+ * rewriting the same code.
+ *
+ * Fixes:
+ * - magnet/mailto/tel/etc open externally instead of becoming blocked pages
+ * - popup-created BrowserWindows are denied globally
+ * - blocked ad subframes stay silent instead of becoming visible error pages
+ * - clean Hoo owl error pages replace technical debug cards
+ * - Google/WhatsApp compatibility hosts keep normal browser headers
+ * - Electron WindowOpenHandler typings compile cleanly
  */
 const fs = require('fs');
 const path = require('path');
@@ -61,9 +65,18 @@ main = replaceOnce(
 main = replaceOnce(
   main,
   'import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders, isLikelyForcedRedirect, isHardBlockedHost } from "./privacy-filters";',
-  'import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders, isLikelyForcedRedirect, isHardBlockedHost, isExternalProtocol } from "./privacy-filters";',
-  'external protocol import'
+  'import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders, isLikelyForcedRedirect, isHardBlockedHost, isExternalProtocol, isCompatibilityHost } from "./privacy-filters";',
+  'external protocol + compatibility import'
 );
+
+main = replaceOnce(
+  main,
+  'const WHATSAPP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) WhatsApp/2.24.4.78 Chrome/120.0.6099.225 Electron/30.0.0 Safari/537.36";',
+  'const WHATSAPP_UA = getRandomUserAgent();',
+  'WhatsApp normal browser UA'
+);
+
+main = main.replace(/Electron\.HandlerDetails/g, 'Electron.WindowOpenHandlerResponse');
 
 main = replaceRegex(
   main,
@@ -132,8 +145,8 @@ function injectSitePolish`,
 
 main = replaceRegex(
   main,
-  /view\.webContents\.setWindowOpenHandler\(\(details\): Electron\.HandlerDetails => \{[\s\S]*?\n\s*\}\);/,
-  `view.webContents.setWindowOpenHandler((details): Electron.HandlerDetails => {
+  /view\.webContents\.setWindowOpenHandler\(\(details\): Electron\.WindowOpenHandlerResponse => \{[\s\S]*?\n\s*\}\);/,
+  `view.webContents.setWindowOpenHandler((details): Electron.WindowOpenHandlerResponse => {
         const sourceUrl = view.webContents.getURL();
         if (isExternalProtocol(details.url)) {
             void shell.openExternal(details.url).catch(() => undefined);
@@ -188,6 +201,29 @@ main = replaceOnce(
   'navigate-to external protocol'
 );
 
+main = replaceRegex(
+  main,
+  /requestHeaders\['DNT'\] = '1';\n\s*requestHeaders\['Sec-GPC'\] = '1';\n\s*requestHeaders\['Accept-Language'\] = 'en-US,en;q=0.9';\n\s*if \(privacySettings\.deepSpoof && details\.url\.includes\('web\.whatsapp\.com'\)\) requestHeaders\['User-Agent'\] = WHATSAPP_UA;\n\s*else requestHeaders\['User-Agent'\] = getRandomUserAgent\(\);/,
+  `if (!isCompatibilityHost(details.url) && !isCompatibilityHost(getPageUrlForRequest(details))) {
+            requestHeaders['DNT'] = '1';
+            requestHeaders['Sec-GPC'] = '1';
+        }
+        requestHeaders['Accept-Language'] = 'en-US,en;q=0.9';
+        requestHeaders['User-Agent'] = details.url.includes('web.whatsapp.com') ? WHATSAPP_UA : getRandomUserAgent();`,
+  'auth-safe request headers'
+);
+
+main = replaceRegex(
+  main,
+  /if \(privacySettings\.deepSpoof && url\.includes\('web\.whatsapp\.com'\)\) \{[\s\S]*?\n\s*\} else \{\n\s*view\.webContents\.setUserAgent\(getRandomUserAgent\(\)\);\n\s*\}/,
+  `if (url.includes('web.whatsapp.com')) {
+            view.webContents.setUserAgent(WHATSAPP_UA);
+        } else {
+            view.webContents.setUserAgent(getRandomUserAgent());
+        }`,
+  'remove brittle WhatsApp navigator spoof'
+);
+
 if (!main.includes("app.on('web-contents-created'")) {
   main = replaceOnce(
     main,
@@ -195,7 +231,7 @@ if (!main.includes("app.on('web-contents-created'")) {
     `app.setName("Hoo Browser");
 
 app.on('web-contents-created', (_event, contents): void => {
-    contents.setWindowOpenHandler(({ url }) => {
+    contents.setWindowOpenHandler(({ url }): Electron.WindowOpenHandlerResponse => {
         if (isExternalProtocol(url)) {
             void shell.openExternal(url).catch(() => undefined);
             return { action: 'deny' };
