@@ -22,6 +22,15 @@ interface TabStripProps {
     onCloseDuplicateTabs?: () => void;
 }
 
+const MENU_WIDTH = 224;
+const MENU_MAX_HEIGHT = 320;
+const TOOLBAR_SAFE_TOP = 78;
+
+const clampMenuPosition = (x: number, y: number, width = MENU_WIDTH, height = MENU_MAX_HEIGHT): { left: number; top: number } => ({
+    left: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
+    top: Math.max(TOOLBAR_SAFE_TOP, Math.min(y, window.innerHeight - height - 8))
+});
+
 const TabStrip: React.FC<TabStripProps> = ({
     tabs,
     activeTabId,
@@ -46,6 +55,7 @@ const TabStrip: React.FC<TabStripProps> = ({
     const [newTabMenu, setNewTabMenu] = React.useState<{ x: number; y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTabRef = React.useRef<HTMLDivElement | null>(null);
+    const menuLayerWasOpenedRef = React.useRef(false);
 
     React.useEffect(() => {
         activeTabRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -68,6 +78,28 @@ const TabStrip: React.FC<TabStripProps> = ({
             window.removeEventListener('keydown', closeOnEscape);
         };
     }, []);
+
+    React.useEffect(() => {
+        const menuOpen = Boolean(contextMenu || newTabMenu);
+        const activeTab = tabs.find(tab => tab.id === activeTabId);
+
+        if (menuOpen) {
+            menuLayerWasOpenedRef.current = true;
+            // Electron BrowserView is a native layer above renderer HTML.
+            // Hide it while tab menus are open so the menu cannot render behind the page.
+            void window.electronAPI?.hideBrowserView?.();
+            return;
+        }
+
+        if (!menuLayerWasOpenedRef.current) return;
+        menuLayerWasOpenedRef.current = false;
+
+        if (activeTab?.type === 'browser') {
+            window.setTimeout(() => {
+                void window.electronAPI?.switchTab?.(activeTab.id);
+            }, 0);
+        }
+    }, [contextMenu, newTabMenu, activeTabId, tabs]);
 
     const startEditing = (e: React.MouseEvent, tab: Tab) => {
         e.stopPropagation();
@@ -123,6 +155,8 @@ const TabStrip: React.FC<TabStripProps> = ({
     const contextIndex = contextTab ? tabs.findIndex(tab => tab.id === contextTab.id) : -1;
     const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(tab => !pinnedTabIds.includes(tab.id));
     const hasDuplicateTabs = new Set(tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean)).size < tabs.filter(tab => tab.type === 'browser' && tab.url).length;
+    const contextPosition = contextMenu ? clampMenuPosition(contextMenu.x, contextMenu.y) : null;
+    const newTabPosition = newTabMenu ? clampMenuPosition(newTabMenu.x, newTabMenu.y, MENU_WIDTH, 260) : null;
 
     return (
         <div className="tab-strip">
@@ -178,8 +212,8 @@ const TabStrip: React.FC<TabStripProps> = ({
                 <Plus size={17} />
             </button>
 
-            {contextMenu && contextTab && (
-                <div className="tab-context-menu" style={{ left: Math.min(contextMenu.x, window.innerWidth - 230), top: Math.min(contextMenu.y, window.innerHeight - 260) }} onClick={(event) => event.stopPropagation()}>
+            {contextMenu && contextTab && contextPosition && (
+                <div className="tab-context-menu" style={{ left: contextPosition.left, top: contextPosition.top }} onClick={(event) => event.stopPropagation()}>
                     <button onClick={() => runMenuAction(() => onTogglePinTab?.(contextTab.id))}><Pin size={14} /> {contextPinned ? 'Unpin tab' : 'Pin tab'}</button>
                     {contextTab.type === 'browser' && <button onClick={() => runMenuAction(() => onDuplicateTab?.(contextTab.id))}><Copy size={14} /> Duplicate tab</button>}
                     {contextTab.type === 'browser' && contextTab.id !== activeTabId && <button onClick={() => runMenuAction(() => onSplitTab(contextTab.id))}><PanelRight size={14} /> Open in split screen</button>}
@@ -191,14 +225,14 @@ const TabStrip: React.FC<TabStripProps> = ({
                 </div>
             )}
 
-            {newTabMenu && (
-                <div className="tab-context-menu" style={{ left: Math.min(newTabMenu.x, window.innerWidth - 230), top: Math.min(newTabMenu.y, window.innerHeight - 230) }} onClick={(event) => event.stopPropagation()}>
+            {newTabMenu && newTabPosition && (
+                <div className="tab-context-menu" style={{ left: newTabPosition.left, top: newTabPosition.top }} onClick={(event) => event.stopPropagation()}>
                     <button onClick={() => runMenuAction(onCreateTab)}><Plus size={14} /> New tab</button>
                     <button disabled={!canReopenClosedTab} onClick={() => runMenuAction(() => onReopenClosedTab?.())}><History size={14} /> Reopen closed tab</button>
                     <button onClick={() => runMenuAction(() => onBookmarkAllTabs?.())}><BookmarkPlus size={14} /> Bookmark all tabs</button>
                     <button disabled={!hasDuplicateTabs} onClick={() => runMenuAction(() => onCloseDuplicateTabs?.())}><Trash2 size={14} /> Close duplicate tabs</button>
                     <span className="tab-context-divider" />
-                    <button onClick={() => runMenuAction(() => tabs.forEach(tab => tab.type === 'browser' && navigator.clipboard?.writeText(tabs.filter(t => t.type === 'browser').map(t => t.url).join('\n'))))}><Layers size={14} /> Copy all tab URLs</button>
+                    <button onClick={() => runMenuAction(() => navigator.clipboard?.writeText(tabs.filter(t => t.type === 'browser').map(t => t.url).join('\n')))}><Layers size={14} /> Copy all tab URLs</button>
                 </div>
             )}
         </div>
