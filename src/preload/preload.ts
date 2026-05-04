@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     navigateTab: (tabId: string, url: string) => ipcRenderer.invoke('navigate-tab', tabId, url),
     setMosaicView: (tabId1: string, tabId2: string) => ipcRenderer.invoke('set-mosaic-view', tabId1, tabId2),
     clearMosaicView: () => ipcRenderer.invoke('clear-mosaic-view'),
+    showTabMenu: (payload: any) => ipcRenderer.invoke('show-tab-menu', payload),
+    showNewTabMenu: (payload: any) => ipcRenderer.invoke('show-new-tab-menu', payload),
     goBack: (tabId: string) => ipcRenderer.invoke('go-back', tabId),
     goForward: (tabId: string) => ipcRenderer.invoke('go-forward', tabId),
     reload: (tabId: string) => ipcRenderer.invoke('reload', tabId),
