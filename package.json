@@ -5,7 +5,7 @@
   "description": "Owl-guided, DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and Linux-first freedom.",
   "main": "dist/main/main.js",
   "scripts": {
-    "prebuild": "node scripts/apply-hoo-stability-hotfix.cjs && node scripts/apply-google-auth-external-mode.cjs",
+    "prebuild": "node scripts/apply-hoo-stability-hotfix.cjs && node scripts/apply-google-auth-external-mode.cjs && node scripts/apply-hoo-browser-features.cjs",
     "build": "webpack --config webpack.config.js",
     "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
@@ -15,6 +15,7 @@
     "dev:start": "npm run build && npm run start",
     "hotfix:stability": "node scripts/apply-hoo-stability-hotfix.cjs",
     "hotfix:google-auth": "node scripts/apply-google-auth-external-mode.cjs",
+    "hotfix:browser-features": "node scripts/apply-hoo-browser-features.cjs",
     "verify:hoo": "node scripts/verify-hoo-local.cjs",
     "typecheck": "tsc --noEmit",
     "verify": "npm run verify:hoo && npm run build",
