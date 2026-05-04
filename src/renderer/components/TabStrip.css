@@ -9,8 +9,9 @@
     gap: 6px;
     -webkit-app-region: no-drag;
     z-index: 20;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: inset 0 -1px 0 rgba(255,255,255,.035);
+    position: relative;
 }
 
 .tabs-container {
@@ -47,16 +48,33 @@
     color: rgba(255, 255, 255, 0.76);
     transform: translateZ(0);
     box-shadow: inset 0 1px 0 rgba(255,255,255,.035), inset 0 -1px 0 #252525;
-    transition: background .14s ease, color .14s ease, border-color .14s ease, max-width .18s ease;
+    transition: background .14s ease, color .14s ease, border-color .14s ease, max-width .18s ease, min-width .18s ease;
     user-select: none;
 }
 
-.tabs-container:has(.tab-item:nth-child(n+8)) .tab-item {
+.tab-item.pinned {
+    flex: 0 0 44px;
+    min-width: 44px;
+    max-width: 44px;
+    justify-content: center;
+    padding: 0;
+    gap: 0;
+}
+
+.pin-indicator {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    color: #ff8b2b;
+    opacity: .85;
+}
+
+.tabs-container:has(.tab-item:nth-child(n+8)) .tab-item:not(.pinned) {
     min-width: 118px;
     max-width: 188px;
 }
 
-.tabs-container:has(.tab-item:nth-child(n+12)) .tab-item {
+.tabs-container:has(.tab-item:nth-child(n+12)) .tab-item:not(.pinned) {
     min-width: 96px;
     max-width: 154px;
 }
@@ -115,6 +133,8 @@
 
 .tab-favicon { color: rgba(255, 255, 255, 0.62); }
 .tab-favicon-img { border-radius: 4px; object-fit: contain; }
+.tab-item.pinned .tab-favicon-img,
+.tab-item.pinned .tab-favicon { width: 18px; height: 18px; }
 
 .tab-title {
     flex: 1;
@@ -151,6 +171,7 @@
 
 .tab-item:hover .tab-actions,
 .tab-item.active .tab-actions { opacity: 1; }
+.tab-item.pinned .tab-actions { display: none; }
 
 .tab-action-btn {
     width: 20px;
@@ -211,8 +232,55 @@
     font-family: inherit;
 }
 
+.tab-context-menu {
+    position: fixed;
+    width: 220px;
+    padding: 7px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(18,18,18,.98);
+    box-shadow: 0 24px 80px rgba(0,0,0,.55);
+    backdrop-filter: blur(18px);
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.tab-context-menu button {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255,255,255,.84);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    padding: 0 9px;
+}
+
+.tab-context-menu button:hover:not(:disabled) {
+    background: rgba(255,255,255,.09);
+    color: #fff;
+}
+
+.tab-context-menu button:disabled {
+    opacity: .38;
+    cursor: default;
+}
+
+.tab-context-divider {
+    height: 1px;
+    background: rgba(255,255,255,.08);
+    margin: 4px 2px;
+}
+
 @media (max-width: 860px) {
-    .tab-item {
+    .tab-item:not(.pinned) {
         min-width: 108px;
         max-width: 168px;
     }
