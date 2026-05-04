@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 /*
  * Hoo stability hotfix
- * Applies the main-process fixes that stop blocked ad frames from becoming full error pages,
- * route magnet/mailto/tel links externally, deny popup-created BrowserWindows, and replace the
- * technical error page with a clean Hoo owl page.
+ * Applies only the main-process fixes that are not yet safely merged into main.ts:
+ * - blocked ad frames should not become full error pages
+ * - magnet/mailto/tel links should open externally
+ * - popup-created BrowserWindows should be denied
+ * - the technical error page should become a clean Hoo owl page
+ *
+ * Important: this script intentionally does NOT edit privacy-filters.ts anymore.
+ * The privacy filter file now receives normal repo patches, including WhatsApp/Google auth compatibility.
  */
 const fs = require('fs');
 const path = require('path');
 
 const root = process.cwd();
 const mainPath = path.join(root, 'src/main/main.ts');
-const privacyPath = path.join(root, 'src/main/privacy-filters.ts');
 
 function die(message) {
   console.error(`[Hoo hotfix] ${message}`);
@@ -19,7 +23,7 @@ function die(message) {
 
 function replaceOnce(source, search, replacement, label) {
   if (!source.includes(search)) {
-    console.warn(`[Hoo hotfix] skipped ${label}; pattern was not found`);
+    console.warn(`[Hoo hotfix] skipped ${label}; pattern was not found or already applied`);
     return source;
   }
   return source.replace(search, replacement);
@@ -27,7 +31,7 @@ function replaceOnce(source, search, replacement, label) {
 
 function replaceRegex(source, regex, replacement, label) {
   if (!regex.test(source)) {
-    console.warn(`[Hoo hotfix] skipped ${label}; pattern was not found`);
+    console.warn(`[Hoo hotfix] skipped ${label}; pattern was not found or already applied`);
     return source;
   }
   return source.replace(regex, replacement);
@@ -155,7 +159,7 @@ main = replaceRegex(
         mainWindow?.webContents.send('tab-loading-state', tabId, false, validatedURL);
         mainWindow?.webContents.send('tab-load-error', tabId, errorCode, errorDescription, validatedURL);
         if (!isMainFrame) return;
-        if (errorCode === -3 || errorCode === -20) return;
+        if (errorCode === -3 || errorCode === -20 || errorCode === -27) return;
         if (validatedURL && !validatedURL.startsWith('data:')) {
             void view.webContents.loadURL(buildErrorPage(validatedURL, errorDescription));
         }
@@ -205,15 +209,4 @@ app.on('web-contents-created', (_event, contents): void => {
 }
 
 writeChanged(mainPath, originalMain, main);
-
-if (fs.existsSync(privacyPath)) {
-  const originalPrivacy = fs.readFileSync(privacyPath, 'utf8');
-  let privacy = originalPrivacy;
-  privacy = privacy.replace(
-    "const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com', 'accounts.google.com'];",
-    "const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com', 'accounts.google.com', 'reddit.com', 'www.reddit.com', 'github.com', 'www.google.com'];"
-  );
-  writeChanged(privacyPath, originalPrivacy, privacy);
-}
-
 console.log('[Hoo hotfix] done. Run: npm run build && npm start');
