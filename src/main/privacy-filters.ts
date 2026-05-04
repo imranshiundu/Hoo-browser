@@ -37,7 +37,17 @@ export const hardBlockedHosts = [
 
 const adBlockSet = new Set(adBlockRules);
 const hardBlockSet = new Set(hardBlockedHosts);
-const SAFE_HEAVY_HOSTS = ['web.whatsapp.com', 'duckduckgo.com', 'www.duckduckgo.com', 'accounts.google.com'];
+
+// These services break when a privacy browser strips cookies/referers or blocks support subdomains.
+// Hoo should behave like normal Chrome here, not like an anti-tracking test lab.
+const COMPATIBILITY_HOSTS = [
+    'web.whatsapp.com', 'whatsapp.com', 'whatsapp.net', 'static.whatsapp.net', 'mmg.whatsapp.net', 'webtp.whatsapp.net', 'flows.whatsapp.net',
+    'accounts.google.com', 'google.com', 'www.google.com', 'apis.google.com', 'ssl.gstatic.com', 'gstatic.com',
+    'googleusercontent.com', 'lh3.googleusercontent.com', 'oauth2.googleapis.com', 'clients6.google.com', 'play.google.com',
+    'youtube.com', 'www.youtube.com', 'github.com', 'duckduckgo.com', 'www.duckduckgo.com', 'reddit.com', 'www.reddit.com'
+];
+
+const SAFE_HEAVY_HOSTS = COMPATIBILITY_HOSTS;
 const DOCUMENT_TYPES = new Set(['mainFrame', 'subFrame']);
 const BLOCKABLE_SUBRESOURCE_TYPES = new Set(['script', 'xhr', 'fetch', 'image', 'stylesheet', 'font', 'media', 'websocket', 'ping', 'beacon', 'object']);
 
@@ -50,17 +60,22 @@ export function hostMatches(hostname: string, rule: string): boolean {
     return hostname === rule || hostname.endsWith(`.${rule}`);
 }
 
-function isSafeHeavyHost(url: string): boolean {
+export function isCompatibilityHost(url: string): boolean {
     try {
-        const hostname = new URL(url).hostname;
-        return SAFE_HEAVY_HOSTS.some(host => hostMatches(hostname, host));
+        const hostname = new URL(url).hostname.toLowerCase();
+        return COMPATIBILITY_HOSTS.some(host => hostMatches(hostname, host));
     } catch {
         return false;
     }
 }
 
+function isSafeHeavyHost(url: string): boolean {
+    return isCompatibilityHost(url);
+}
+
 export function isHardBlockedHost(url: string): boolean {
     if (isExternalProtocol(url)) return false;
+    if (isCompatibilityHost(url)) return false;
     try {
         const hostname = new URL(url).hostname.toLowerCase();
         for (const domain of hardBlockSet) {
@@ -74,6 +89,7 @@ export function isHardBlockedHost(url: string): boolean {
 
 export function isLikelyForcedRedirect(targetUrl: string, sourceUrl?: string): boolean {
     if (isExternalProtocol(targetUrl)) return false;
+    if (isCompatibilityHost(targetUrl)) return false;
     if (!sourceUrl || sourceUrl.startsWith('about:') || sourceUrl.startsWith('hoo:')) return false;
     try {
         const source = new URL(sourceUrl);
@@ -120,6 +136,7 @@ export function shouldBlockRequest(url: string, resourceType?: string): boolean 
 
 export function isThirdPartyRequest(resourceUrl: string, pageUrl?: string): boolean {
     if (!pageUrl || pageUrl.startsWith('about:') || isExternalProtocol(resourceUrl)) return false;
+    if (isCompatibilityHost(resourceUrl) || isCompatibilityHost(pageUrl)) return false;
     try {
         const resourceHost = new URL(resourceUrl).hostname.replace(/^www\./, '');
         const pageHost = new URL(pageUrl).hostname.replace(/^www\./, '');
@@ -142,6 +159,8 @@ export function stripJunkRequestHeaders(headers: Record<string, string | string[
         if (flat !== undefined) next[key] = flat;
     }
 
+    if (isCompatibilityHost(resourceUrl) || isCompatibilityHost(pageUrl || '')) return next;
+
     if (isThirdPartyRequest(resourceUrl, pageUrl)) {
         delete next.Cookie;
         delete next.cookie;
@@ -159,6 +178,7 @@ export function stripJunkResponseHeaders(headers: Record<string, string | string
     for (const [key, value] of Object.entries(headers)) {
         if (typeof value === 'string' || Array.isArray(value)) next[key] = value;
     }
+    if (isCompatibilityHost(resourceUrl) || isCompatibilityHost(pageUrl || '')) return next;
     if (isThirdPartyRequest(resourceUrl, pageUrl)) {
         delete next['set-cookie'];
         delete next['Set-Cookie'];
@@ -169,6 +189,7 @@ export function stripJunkResponseHeaders(headers: Record<string, string | string
 export async function isMaliciousUrl(url: string): Promise<boolean> {
     try {
         if (isExternalProtocol(url)) return false;
+        if (isCompatibilityHost(url)) return false;
         const maliciousPatterns = [
             'phish-discovery.com',
             'login-verify-account.net',
@@ -185,7 +206,8 @@ export async function isMaliciousUrl(url: string): Promise<boolean> {
     }
 }
 
-export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+// Keep this close to a real desktop Chrome UA. Google auth often rejects odd embedded/Electron signatures.
+export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 
 export function getRandomUserAgent(): string {
     return DEFAULT_USER_AGENT;
