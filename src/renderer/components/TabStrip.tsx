@@ -55,7 +55,6 @@ const TabStrip: React.FC<TabStripProps> = ({
     const [newTabMenu, setNewTabMenu] = React.useState<{ x: number; y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTabRef = React.useRef<HTMLDivElement | null>(null);
-    const menuLayerWasOpenedRef = React.useRef(false);
 
     React.useEffect(() => {
         activeTabRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -78,28 +77,6 @@ const TabStrip: React.FC<TabStripProps> = ({
             window.removeEventListener('keydown', closeOnEscape);
         };
     }, []);
-
-    React.useEffect(() => {
-        const menuOpen = Boolean(contextMenu || newTabMenu);
-        const activeTab = tabs.find(tab => tab.id === activeTabId);
-
-        if (menuOpen) {
-            menuLayerWasOpenedRef.current = true;
-            // Electron BrowserView is a native layer above renderer HTML.
-            // Hide it while tab menus are open so the menu cannot render behind the page.
-            void window.electronAPI?.hideBrowserView?.();
-            return;
-        }
-
-        if (!menuLayerWasOpenedRef.current) return;
-        menuLayerWasOpenedRef.current = false;
-
-        if (activeTab?.type === 'browser') {
-            window.setTimeout(() => {
-                void window.electronAPI?.switchTab?.(activeTab.id);
-            }, 0);
-        }
-    }, [contextMenu, newTabMenu, activeTabId, tabs]);
 
     const startEditing = (e: React.MouseEvent, tab: Tab) => {
         e.stopPropagation();
@@ -124,17 +101,85 @@ const TabStrip: React.FC<TabStripProps> = ({
         }
     };
 
-    const openContextMenu = (event: React.MouseEvent, tabId: string) => {
+    const orderedTabs = [...tabs].sort((a, b) => {
+        const aPinned = pinnedTabIds.includes(a.id);
+        const bPinned = pinnedTabIds.includes(b.id);
+        if (aPinned === bPinned) return 0;
+        return aPinned ? -1 : 1;
+    });
+
+    const executeTabAction = (action: string | null, tab: Tab) => {
+        if (!action) return;
+        if (action === 'toggle-pin') onTogglePinTab?.(tab.id);
+        if (action === 'duplicate') onDuplicateTab?.(tab.id);
+        if (action === 'split') onSplitTab(tab.id);
+        if (action === 'close-others') onCloseOtherTabs?.(tab.id);
+        if (action === 'close-right') onCloseTabsToRight?.(tab.id);
+        if (action === 'close') onCloseTab(tab.id);
+    };
+
+    const executeNewTabAction = (action: string | null) => {
+        if (!action) return;
+        if (action === 'new-tab') onCreateTab();
+        if (action === 'reopen-closed') onReopenClosedTab?.();
+        if (action === 'bookmark-all') onBookmarkAllTabs?.();
+        if (action === 'close-duplicates') onCloseDuplicateTabs?.();
+        if (action === 'copy-all-urls') {
+            void navigator.clipboard?.writeText(tabs.filter(t => t.type === 'browser').map(t => t.url).filter(Boolean).join('\n'));
+        }
+    };
+
+    const openContextMenu = async (event: React.MouseEvent, tabId: string) => {
         event.preventDefault();
         event.stopPropagation();
         setNewTabMenu(null);
+
+        const tab = tabs.find(candidate => candidate.id === tabId);
+        if (!tab) return;
+
+        const contextIndex = tabs.findIndex(candidate => candidate.id === tabId);
+        const isPinned = pinnedTabIds.includes(tabId);
+        const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(candidate => !pinnedTabIds.includes(candidate.id));
+
+        if (window.electronAPI?.showTabMenu) {
+            const action = await window.electronAPI.showTabMenu({
+                x: event.clientX,
+                y: event.clientY,
+                tabId,
+                title: tab.title,
+                url: tab.url,
+                isPinned,
+                isActive: tabId === activeTabId,
+                canClose: !isPinned && (tabs.length > 1 || tab.type === 'browser'),
+                canSplit: tab.type === 'browser' && tabId !== activeTabId && tabId !== splitTabId,
+                hasTabsToRight
+            });
+            executeTabAction(action, tab);
+            return;
+        }
+
         setContextMenu({ x: event.clientX, y: event.clientY, tabId });
     };
 
-    const openNewTabMenu = (event: React.MouseEvent) => {
+    const openNewTabMenu = async (event: React.MouseEvent) => {
         event.preventDefault();
         event.stopPropagation();
         setContextMenu(null);
+
+        const browserUrls = tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean);
+        const hasDuplicateTabs = new Set(browserUrls).size < browserUrls.length;
+
+        if (window.electronAPI?.showNewTabMenu) {
+            const action = await window.electronAPI.showNewTabMenu({
+                x: event.clientX,
+                y: event.clientY,
+                canReopenClosedTab,
+                hasDuplicateTabs
+            });
+            executeNewTabAction(action);
+            return;
+        }
+
         setNewTabMenu({ x: event.clientX, y: event.clientY });
     };
 
@@ -144,17 +189,12 @@ const TabStrip: React.FC<TabStripProps> = ({
         setNewTabMenu(null);
     };
 
-    const orderedTabs = [...tabs].sort((a, b) => {
-        const aPinned = pinnedTabIds.includes(a.id);
-        const bPinned = pinnedTabIds.includes(b.id);
-        if (aPinned === bPinned) return 0;
-        return aPinned ? -1 : 1;
-    });
     const contextTab = contextMenu ? tabs.find(tab => tab.id === contextMenu.tabId) : null;
     const contextPinned = contextTab ? pinnedTabIds.includes(contextTab.id) : false;
     const contextIndex = contextTab ? tabs.findIndex(tab => tab.id === contextTab.id) : -1;
     const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(tab => !pinnedTabIds.includes(tab.id));
-    const hasDuplicateTabs = new Set(tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean)).size < tabs.filter(tab => tab.type === 'browser' && tab.url).length;
+    const browserUrls = tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean);
+    const hasDuplicateTabs = new Set(browserUrls).size < browserUrls.length;
     const contextPosition = contextMenu ? clampMenuPosition(contextMenu.x, contextMenu.y) : null;
     const newTabPosition = newTabMenu ? clampMenuPosition(newTabMenu.x, newTabMenu.y, MENU_WIDTH, 260) : null;
 
@@ -173,7 +213,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                             className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''}`}
                             onClick={() => onSwitchTab(tab.id)}
                             onDoubleClick={(e) => startEditing(e, tab)}
-                            onContextMenu={(e) => openContextMenu(e, tab.id)}
+                            onContextMenu={(e) => void openContextMenu(e, tab.id)}
                             onMouseDown={(e) => {
                                 if (e.button === 1 && canClose) {
                                     e.preventDefault();
@@ -208,7 +248,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                     );
                 })}
             </div>
-            <button className="new-tab-btn" onClick={onCreateTab} onContextMenu={openNewTabMenu} title="New tab">
+            <button className="new-tab-btn" onClick={onCreateTab} onContextMenu={(e) => void openNewTabMenu(e)} title="New tab">
                 <Plus size={17} />
             </button>
 
