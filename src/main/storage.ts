@@ -52,7 +52,9 @@ export interface StorageData {
     lastUpdated: number;
 }
 
-const STORAGE_FILE = path.join(app.getPath('userData'), 'user-data.json');
+function getStorageFile(): string {
+    return path.join(app.getPath('userData'), 'user-data.json');
+}
 
 const defaultData: StorageData = {
     tabs: [],
@@ -61,7 +63,7 @@ const defaultData: StorageData = {
     crashedTabs: [],
     settings: {
         dataRetention: 'forever',
-        deepSpoof: true,
+        deepSpoof: false,
         lazySessionRestore: true,
         maxLiveBackgroundTabs: 4,
         sleepIdleTabsAfterMinutes: 15
@@ -113,13 +115,14 @@ function decodeStorageBuffer(content: Buffer): string {
 }
 
 function writePlainJsonAtomic(data: StorageData): void {
-    const dir = path.dirname(STORAGE_FILE);
+    const storageFile = getStorageFile();
+    const dir = path.dirname(storageFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    const tmpPath = `${STORAGE_FILE}.tmp`;
+    const tmpPath = `${storageFile}.tmp`;
     const jsonString = JSON.stringify(data, null, 2);
     fs.writeFileSync(tmpPath, jsonString, 'utf8');
-    fs.renameSync(tmpPath, STORAGE_FILE);
+    fs.renameSync(tmpPath, storageFile);
 }
 
 export class StorageService {
@@ -127,10 +130,15 @@ export class StorageService {
         return safeStorage.isEncryptionAvailable();
     }
 
+    static getStorageFile(): string {
+        return getStorageFile();
+    }
+
     static load(): StorageData {
+        const storageFile = getStorageFile();
         try {
-            if (fs.existsSync(STORAGE_FILE)) {
-                const content = fs.readFileSync(STORAGE_FILE);
+            if (fs.existsSync(storageFile)) {
+                const content = fs.readFileSync(storageFile);
                 const jsonString = decodeStorageBuffer(content);
                 const data = JSON.parse(jsonString);
                 return normalizeStorageData(data);
@@ -138,13 +146,13 @@ export class StorageService {
         } catch (error) {
             console.error('[Storage] Error loading data:', error);
             try {
-                if (fs.existsSync(STORAGE_FILE)) {
-                    const raw = fs.readFileSync(STORAGE_FILE).toString('utf8').trim();
+                if (fs.existsSync(storageFile)) {
+                    const raw = fs.readFileSync(storageFile).toString('utf8').trim();
                     if (raw && !raw.startsWith('{') && !raw.startsWith('[')) {
                         console.warn('[Storage] Profile file was not readable JSON. Keeping it in place; starting with defaults for this session.');
                     } else {
-                        const brokenPath = `${STORAGE_FILE}.broken-${Date.now()}`;
-                        fs.renameSync(STORAGE_FILE, brokenPath);
+                        const brokenPath = `${storageFile}.broken-${Date.now()}`;
+                        fs.renameSync(storageFile, brokenPath);
                         console.warn(`[Storage] Corrupt JSON profile data moved to ${brokenPath}.`);
                     }
                 }
@@ -201,9 +209,10 @@ export class StorageService {
     }
 
     static wipeAll() {
+        const storageFile = getStorageFile();
         try {
-            if (fs.existsSync(STORAGE_FILE)) {
-                fs.unlinkSync(STORAGE_FILE);
+            if (fs.existsSync(storageFile)) {
+                fs.unlinkSync(storageFile);
                 console.log('[Storage] user-data.json purged.');
             }
         } catch (error) {
