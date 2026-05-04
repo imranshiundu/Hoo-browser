@@ -1,35 +1,61 @@
 import React from 'react';
 import './TabStrip.css';
-import { X, Plus, Globe, Columns } from 'lucide-react';
+import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw } from 'lucide-react';
 import { Tab, getFaviconUrl } from '../types';
 
 interface TabStripProps {
     tabs: Tab[];
     activeTabId: string;
     splitTabId: string | null;
+    pinnedTabIds?: string[];
     onSwitchTab: (id: string) => void;
     onSplitTab: (id: string) => void;
     onCloseTab: (id: string) => void;
     onCreateTab: () => void;
+    onDuplicateTab?: (id: string) => void;
+    onCloseOtherTabs?: (id: string) => void;
+    onCloseTabsToRight?: (id: string) => void;
+    onTogglePinTab?: (id: string) => void;
 }
 
 const TabStrip: React.FC<TabStripProps> = ({
     tabs,
     activeTabId,
     splitTabId,
+    pinnedTabIds = [],
     onSwitchTab,
     onSplitTab,
     onCloseTab,
-    onCreateTab
+    onCreateTab,
+    onDuplicateTab,
+    onCloseOtherTabs,
+    onCloseTabsToRight,
+    onTogglePinTab
 }) => {
     const [editingId, setEditingId] = React.useState<string | null>(null);
     const [editValue, setEditValue] = React.useState('');
+    const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; tabId: string } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTabRef = React.useRef<HTMLDivElement | null>(null);
 
     React.useEffect(() => {
         activeTabRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }, [activeTabId, tabs.length]);
+
+    React.useEffect(() => {
+        const close = () => setContextMenu(null);
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setContextMenu(null);
+        };
+        window.addEventListener('click', close);
+        window.addEventListener('blur', close);
+        window.addEventListener('keydown', closeOnEscape);
+        return () => {
+            window.removeEventListener('click', close);
+            window.removeEventListener('blur', close);
+            window.removeEventListener('keydown', closeOnEscape);
+        };
+    }, []);
 
     const startEditing = (e: React.MouseEvent, tab: Tab) => {
         e.stopPropagation();
@@ -54,20 +80,44 @@ const TabStrip: React.FC<TabStripProps> = ({
         }
     };
 
+    const openContextMenu = (event: React.MouseEvent, tabId: string) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setContextMenu({ x: event.clientX, y: event.clientY, tabId });
+    };
+
+    const runMenuAction = (action: () => void) => {
+        action();
+        setContextMenu(null);
+    };
+
+    const orderedTabs = [...tabs].sort((a, b) => {
+        const aPinned = pinnedTabIds.includes(a.id);
+        const bPinned = pinnedTabIds.includes(b.id);
+        if (aPinned === bPinned) return 0;
+        return aPinned ? -1 : 1;
+    });
+    const contextTab = contextMenu ? tabs.find(tab => tab.id === contextMenu.tabId) : null;
+    const contextPinned = contextTab ? pinnedTabIds.includes(contextTab.id) : false;
+    const contextIndex = contextTab ? tabs.findIndex(tab => tab.id === contextTab.id) : -1;
+    const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(tab => !pinnedTabIds.includes(tab.id));
+
     return (
         <div className="tab-strip">
             <div className="tabs-container" ref={containerRef} onWheel={handleWheel}>
-                {tabs.map(tab => {
+                {orderedTabs.map(tab => {
                     const faviconUrl = getFaviconUrl(tab.url);
                     const isActive = tab.id === activeTabId;
-                    const canClose = tabs.length > 1 || tab.type === 'browser';
+                    const isPinned = pinnedTabIds.includes(tab.id);
+                    const canClose = !isPinned && (tabs.length > 1 || tab.type === 'browser');
                     return (
                         <div
                             key={tab.id}
                             ref={isActive ? activeTabRef : undefined}
-                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''}`}
+                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''}`}
                             onClick={() => onSwitchTab(tab.id)}
                             onDoubleClick={(e) => startEditing(e, tab)}
+                            onContextMenu={(e) => openContextMenu(e, tab.id)}
                             onMouseDown={(e) => {
                                 if (e.button === 1 && canClose) {
                                     e.preventDefault();
@@ -76,6 +126,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                             }}
                             title={tab.title}
                         >
+                            {isPinned && <Pin size={10} className="pin-indicator" />}
                             {faviconUrl ? (
                                 <img className="tab-favicon-img" src={faviconUrl} alt="" draggable={false} />
                             ) : (
@@ -95,12 +146,12 @@ const TabStrip: React.FC<TabStripProps> = ({
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 />
-                            ) : (
+                            ) : !isPinned && (
                                 <span className="tab-title">{tab.title || 'New Tab'}</span>
                             )}
 
                             <div className="tab-actions">
-                                {tab.type === 'browser' && tab.id !== activeTabId && tab.id !== splitTabId && (
+                                {tab.type === 'browser' && tab.id !== activeTabId && tab.id !== splitTabId && !isPinned && (
                                     <button
                                         className="tab-action-btn split-btn"
                                         onClick={(e) => {
@@ -132,6 +183,23 @@ const TabStrip: React.FC<TabStripProps> = ({
             <button className="new-tab-btn" onClick={onCreateTab} title="New tab">
                 <Plus size={17} />
             </button>
+
+            {contextMenu && contextTab && (
+                <div
+                    className="tab-context-menu"
+                    style={{ left: Math.min(contextMenu.x, window.innerWidth - 230), top: Math.min(contextMenu.y, window.innerHeight - 260) }}
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <button onClick={() => runMenuAction(() => onTogglePinTab?.(contextTab.id))}><Pin size={14} /> {contextPinned ? 'Unpin tab' : 'Pin tab'}</button>
+                    {contextTab.type === 'browser' && <button onClick={() => runMenuAction(() => onDuplicateTab?.(contextTab.id))}><Copy size={14} /> Duplicate tab</button>}
+                    {contextTab.type === 'browser' && contextTab.id !== activeTabId && <button onClick={() => runMenuAction(() => onSplitTab(contextTab.id))}><PanelRight size={14} /> Open in split screen</button>}
+                    {contextTab.type === 'browser' && <button onClick={() => runMenuAction(() => navigator.clipboard?.writeText(contextTab.url || ''))}><Copy size={14} /> Copy tab URL</button>}
+                    <span className="tab-context-divider" />
+                    <button onClick={() => runMenuAction(() => onCloseOtherTabs?.(contextTab.id))}><RotateCcw size={14} /> Close other tabs</button>
+                    <button disabled={!hasTabsToRight} onClick={() => runMenuAction(() => onCloseTabsToRight?.(contextTab.id))}><X size={14} /> Close tabs to the right</button>
+                    <button disabled={contextPinned} onClick={() => runMenuAction(() => onCloseTab(contextTab.id))}><X size={14} /> Close tab</button>
+                </div>
+            )}
         </div>
     );
 };
