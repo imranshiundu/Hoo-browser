@@ -10,12 +10,16 @@ import { Tab } from './types';
 const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
 const initialHomeTab = makeHomeTab();
 const PINNED_TABS_KEY = 'hoo:pinned-tabs';
+const BOOKMARK_KEY = 'hoo:bookmarks';
+
+type ClosedTab = { title: string; url: string };
 
 const App: React.FC = () => {
     const [tabs, setTabs] = useState<Tab[]>([initialHomeTab]);
     const [activeTabId, setActiveTabId] = useState<string>(initialHomeTab.id);
     const [splitTabId, setSplitTabId] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+    const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([]);
     const [pinnedTabIds, setPinnedTabIds] = useState<string[]>(() => {
         try { return JSON.parse(localStorage.getItem(PINNED_TABS_KEY) || '[]'); }
         catch { return []; }
@@ -26,6 +30,11 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem(PINNED_TABS_KEY, JSON.stringify(pinnedTabIds.filter(id => tabs.some(tab => tab.id === id))));
     }, [pinnedTabIds, tabs]);
+
+    const rememberClosedTab = (tab: Tab): void => {
+        if (tab.type !== 'browser' || !tab.url) return;
+        setClosedTabs(prev => [{ title: tab.title || tab.url, url: tab.url }, ...prev].slice(0, 20));
+    };
 
     const openHomeTab = (): void => {
         const tab = makeHomeTab();
@@ -68,6 +77,7 @@ const App: React.FC = () => {
         const targetTab = tabs.find(t => t.id === tabId);
         if (!targetTab) return;
         if (pinnedTabIds.includes(tabId)) return;
+        rememberClosedTab(targetTab);
 
         const tabIndex = tabs.findIndex(t => t.id === tabId);
         const remainingTabs = tabs.filter(t => t.id !== tabId);
@@ -111,9 +121,20 @@ const App: React.FC = () => {
         setActiveTabId(newTabId);
     };
 
+    const reopenClosedTab = async (): Promise<void> => {
+        const [last, ...rest] = closedTabs;
+        if (!last) return;
+        setClosedTabs(rest);
+        const newTabId = await window.electronAPI?.navigateTo?.(last.url);
+        if (!newTabId) return;
+        setTabs(prev => [...prev, { id: newTabId, type: 'browser', title: last.title || 'Loading...', url: last.url }]);
+        setActiveTabId(newTabId);
+    };
+
     const closeOtherTabs = async (tabId: string): Promise<void> => {
         const keepIds = new Set([tabId, ...pinnedTabIds]);
         const closing = tabs.filter(tab => !keepIds.has(tab.id));
+        closing.forEach(rememberClosedTab);
         for (const tab of closing) {
             if (tab.type === 'browser') await window.electronAPI?.closeTab(tab.id);
         }
@@ -127,12 +148,46 @@ const App: React.FC = () => {
         const index = tabs.findIndex(tab => tab.id === tabId);
         if (index < 0) return;
         const closing = tabs.slice(index + 1).filter(tab => !pinnedTabIds.includes(tab.id));
+        closing.forEach(rememberClosedTab);
         for (const tab of closing) {
             if (tab.type === 'browser') await window.electronAPI?.closeTab(tab.id);
         }
         const closingIds = new Set(closing.map(tab => tab.id));
         setTabs(prev => prev.filter(tab => !closingIds.has(tab.id)));
         if (splitTabId && closingIds.has(splitTabId)) setSplitTabId(null);
+    };
+
+    const closeDuplicateTabs = async (): Promise<void> => {
+        const seen = new Set<string>();
+        const closing: Tab[] = [];
+        for (const tab of tabs) {
+            if (tab.type !== 'browser' || !tab.url || pinnedTabIds.includes(tab.id)) continue;
+            if (seen.has(tab.url)) closing.push(tab);
+            else seen.add(tab.url);
+        }
+        closing.forEach(rememberClosedTab);
+        for (const tab of closing) await window.electronAPI?.closeTab(tab.id);
+        const closingIds = new Set(closing.map(tab => tab.id));
+        setTabs(prev => prev.filter(tab => !closingIds.has(tab.id)));
+        if (closingIds.has(activeTabId)) {
+            const next = tabs.find(tab => !closingIds.has(tab.id));
+            if (next) await handleSwitchTab(next.id);
+        }
+    };
+
+    const bookmarkAllTabs = (): void => {
+        try {
+            const current = JSON.parse(localStorage.getItem(BOOKMARK_KEY) || '[]');
+            const browserTabs = tabs.filter(tab => tab.type === 'browser' && tab.url);
+            const next = [
+                ...browserTabs.map(tab => ({ id: `${Date.now()}-${tab.id}`, title: tab.title || tab.url, url: tab.url })),
+                ...current
+            ];
+            const deduped = next.filter((item, index, all) => all.findIndex(other => other.url === item.url) === index).slice(0, 80);
+            localStorage.setItem(BOOKMARK_KEY, JSON.stringify(deduped));
+        } catch {
+            // localStorage can fail in rare private/profile states; ignore so browser UX does not crash.
+        }
     };
 
     const togglePinTab = (tabId: string): void => {
@@ -159,6 +214,10 @@ const App: React.FC = () => {
                 e.preventDefault();
                 void duplicateTab(activeTabId);
             }
+            if (mod && e.shiftKey && key === 't') {
+                e.preventDefault();
+                void reopenClosedTab();
+            }
             if (mod && e.shiftKey && key === 'tab') {
                 e.preventDefault();
                 const index = tabs.findIndex(t => t.id === activeTabId);
@@ -183,7 +242,7 @@ const App: React.FC = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [settingsOpen, tabs, activeTabId, splitTabId, pinnedTabIds]);
+    }, [settingsOpen, tabs, activeTabId, splitTabId, pinnedTabIds, closedTabs]);
 
     useEffect(() => {
         if (settingsOpen) {
@@ -244,6 +303,7 @@ const App: React.FC = () => {
                     activeTabId={activeTabId}
                     splitTabId={splitTabId}
                     pinnedTabIds={pinnedTabIds}
+                    canReopenClosedTab={closedTabs.length > 0}
                     onSwitchTab={(id): void => { void handleSwitchTab(id); }}
                     onSplitTab={(id): void => { void handleSplitTab(id); }}
                     onCloseTab={(id): void => { void handleCloseTab(id); }}
@@ -252,6 +312,9 @@ const App: React.FC = () => {
                     onCloseOtherTabs={(id): void => { void closeOtherTabs(id); }}
                     onCloseTabsToRight={(id): void => { void closeTabsToRight(id); }}
                     onTogglePinTab={togglePinTab}
+                    onReopenClosedTab={() => { void reopenClosedTab(); }}
+                    onBookmarkAllTabs={bookmarkAllTabs}
+                    onCloseDuplicateTabs={() => { void closeDuplicateTabs(); }}
                 />
                 <section className="browser-stage">
                     {activeTab.type === 'browser' ? (
