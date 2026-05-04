@@ -1,4 +1,4 @@
-import { BrowserView, Menu, MenuItemConstructorOptions, clipboard, shell } from 'electron';
+import { BrowserView, BrowserWindow, Menu, MenuItemConstructorOptions, clipboard, shell } from 'electron';
 
 export type BrowserContextMenuActions = {
     openUrlInNewTab: (url: string) => void;
@@ -16,6 +16,14 @@ function getSearchUrl(text: string): string {
 function shortened(value: string, max = 56): string {
     const clean = value.replace(/\s+/g, ' ').trim();
     return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+function isLikelyImage(url: string, mediaType?: string): boolean {
+    return mediaType === 'image' || /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)(\?|#|$)/i.test(url);
+}
+
+function isDownloadable(url: string): boolean {
+    return /\.(zip|tar|gz|7z|rar|pdf|docx?|xlsx?|pptx?|apk|exe|deb|rpm|mp[34]|mov|webm|png|jpe?g|gif|webp)(\?|#|$)/i.test(url);
 }
 
 export function setupBrowserContextMenu(view: BrowserView, actions: BrowserContextMenuActions): void {
@@ -46,26 +54,30 @@ export function setupBrowserContextMenu(view: BrowserView, actions: BrowserConte
             template.push(
                 { label: 'Open link in new tab', click: () => actions.openUrlInNewTab(linkUrl) },
                 { label: 'Open link here', click: () => actions.openUrlInCurrentTab(linkUrl) },
-                { label: 'Copy link address', click: () => clipboard.writeText(linkUrl) },
-                { type: 'separator' }
+                { label: 'Open link externally', click: () => shell.openExternal(linkUrl) },
+                { label: 'Copy link address', click: () => clipboard.writeText(linkUrl) }
             );
+            if (isDownloadable(linkUrl)) template.push({ label: 'Download linked file', click: () => actions.openUrlInNewTab(linkUrl) });
+            template.push({ type: 'separator' });
         }
 
         if (hasValue(srcUrl)) {
-            const isImage = params.mediaType === 'image' || /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i.test(srcUrl);
+            const isImage = isLikelyImage(srcUrl, params.mediaType);
             const isVideo = params.mediaType === 'video';
             const isAudio = params.mediaType === 'audio';
             if (isImage) {
                 template.push(
                     { label: 'Open image in new tab', click: () => actions.openUrlInNewTab(srcUrl) },
                     { label: 'Copy image address', click: () => clipboard.writeText(srcUrl) },
-                    { label: 'Save image as…', click: () => shell.openExternal(srcUrl) },
+                    { label: 'Open image externally', click: () => shell.openExternal(srcUrl) },
                     { type: 'separator' }
                 );
             } else if (isVideo || isAudio) {
+                const mediaLabel = isVideo ? 'video' : 'audio';
                 template.push(
-                    { label: `Open ${isVideo ? 'video' : 'audio'} in new tab`, click: () => actions.openUrlInNewTab(srcUrl) },
-                    { label: `Copy ${isVideo ? 'video' : 'audio'} address`, click: () => clipboard.writeText(srcUrl) },
+                    { label: `Open ${mediaLabel} in new tab`, click: () => actions.openUrlInNewTab(srcUrl) },
+                    { label: `Copy ${mediaLabel} address`, click: () => clipboard.writeText(srcUrl) },
+                    { label: `Open ${mediaLabel} externally`, click: () => shell.openExternal(srcUrl) },
                     { type: 'separator' }
                 );
             }
@@ -91,8 +103,8 @@ export function setupBrowserContextMenu(view: BrowserView, actions: BrowserConte
         }
 
         template.push(
-            { label: 'Back', enabled: view.webContents.navigationHistory?.canGoBack?.() ?? false, click: () => view.webContents.navigationHistory.goBack() },
-            { label: 'Forward', enabled: view.webContents.navigationHistory?.canGoForward?.() ?? false, click: () => view.webContents.navigationHistory.goForward() },
+            { label: 'Back', enabled: view.webContents.canGoBack(), click: () => view.webContents.goBack() },
+            { label: 'Forward', enabled: view.webContents.canGoForward(), click: () => view.webContents.goForward() },
             { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => view.webContents.reload() },
             { type: 'separator' },
             { label: 'Copy page address', enabled: hasValue(pageUrl), click: () => clipboard.writeText(pageUrl) },
@@ -103,6 +115,6 @@ export function setupBrowserContextMenu(view: BrowserView, actions: BrowserConte
             template.push({ type: 'separator' }, { label: 'Inspect element', click: () => view.webContents.inspectElement(params.x, params.y) });
         }
 
-        Menu.buildFromTemplate(template).popup({ window: view.webContents.getOwnerBrowserWindow() || undefined });
+        Menu.buildFromTemplate(template).popup({ window: BrowserWindow.fromWebContents(view.webContents) || undefined });
     });
 }
