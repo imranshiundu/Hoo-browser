@@ -2,17 +2,8 @@
 /*
  * Hoo stability + auth compatibility hotfix
  *
- * This exists because the BrowserView main-process file is still being stabilized.
- * It is intentionally idempotent: running it before every build should not keep
- * rewriting the same code.
- *
- * Fixes:
- * - magnet/mailto/tel/etc open externally instead of becoming blocked pages
- * - popup-created BrowserWindows are denied globally
- * - blocked ad subframes stay silent instead of becoming visible error pages
- * - clean Hoo owl error pages replace technical debug cards
- * - Google/WhatsApp compatibility hosts keep normal browser headers
- * - Electron WindowOpenHandler typings compile cleanly
+ * Idempotent local patcher for the BrowserView main-process file.
+ * It must not leave main.ts in a half-patched state.
  */
 const fs = require('fs');
 const path = require('path');
@@ -50,24 +41,43 @@ function writeChanged(file, before, after) {
   console.log(`[Hoo hotfix] patched: ${path.relative(root, file)}`);
 }
 
+function ensureElectronImport(source) {
+  const match = source.match(/import \{([^}]+)\} from ["']electron["'];/);
+  if (!match) return source;
+  const names = match[1].split(',').map(item => item.trim()).filter(Boolean);
+  for (const required of ['app', 'BrowserWindow', 'BrowserView', 'ipcMain', 'session', 'shell']) {
+    if (!names.includes(required)) names.push(required);
+  }
+  return source.replace(match[0], `import { ${names.join(', ')} } from "electron";`);
+}
+
+function ensurePrivacyImport(source) {
+  const match = source.match(/import \{([^}]+)\} from ["']\.\/privacy-filters["'];/);
+  if (!match) return source;
+  const names = match[1].split(',').map(item => item.trim()).filter(Boolean);
+  for (const required of [
+    'shouldBlockRequest',
+    'getRandomUserAgent',
+    'isMaliciousUrl',
+    'stripJunkRequestHeaders',
+    'stripJunkResponseHeaders',
+    'isLikelyForcedRedirect',
+    'isHardBlockedHost',
+    'isExternalProtocol',
+    'isCompatibilityHost'
+  ]) {
+    if (!names.includes(required)) names.push(required);
+  }
+  return source.replace(match[0], `import { ${names.join(', ')} } from "./privacy-filters";`);
+}
+
 if (!fs.existsSync(mainPath)) die('Run from the Hoo-browser repo root. Missing src/main/main.ts');
 
 const originalMain = fs.readFileSync(mainPath, 'utf8');
 let main = originalMain;
 
-main = replaceOnce(
-  main,
-  'import { app, BrowserWindow, BrowserView, ipcMain, session } from "electron";',
-  'import { app, BrowserWindow, BrowserView, ipcMain, session, shell } from "electron";',
-  'electron shell import'
-);
-
-main = replaceOnce(
-  main,
-  'import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders, isLikelyForcedRedirect, isHardBlockedHost } from "./privacy-filters";',
-  'import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkRequestHeaders, stripJunkResponseHeaders, isLikelyForcedRedirect, isHardBlockedHost, isExternalProtocol, isCompatibilityHost } from "./privacy-filters";',
-  'external protocol + compatibility import'
-);
+main = ensureElectronImport(main);
+main = ensurePrivacyImport(main);
 
 main = replaceOnce(
   main,
@@ -223,6 +233,18 @@ main = replaceRegex(
         }`,
   'remove brittle WhatsApp navigator spoof'
 );
+
+if (!main.includes("process.env.HOO_USER_DATA_DIR") && main.includes('app.setName("Hoo Browser");')) {
+  main = replaceOnce(
+    main,
+    'app.setName("Hoo Browser");',
+    `app.setName("Hoo Browser");
+if (process.env.HOO_USER_DATA_DIR) {
+    app.setPath('userData', process.env.HOO_USER_DATA_DIR);
+}`,
+    'auth trace userData path'
+  );
+}
 
 if (!main.includes("app.on('web-contents-created'")) {
   main = replaceOnce(
