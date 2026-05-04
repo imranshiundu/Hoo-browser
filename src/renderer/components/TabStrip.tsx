@@ -1,6 +1,6 @@
 import React from 'react';
 import './TabStrip.css';
-import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw } from 'lucide-react';
+import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw, BookmarkPlus, History, Layers, Trash2 } from 'lucide-react';
 import { Tab, getFaviconUrl } from '../types';
 
 interface TabStripProps {
@@ -8,6 +8,7 @@ interface TabStripProps {
     activeTabId: string;
     splitTabId: string | null;
     pinnedTabIds?: string[];
+    canReopenClosedTab?: boolean;
     onSwitchTab: (id: string) => void;
     onSplitTab: (id: string) => void;
     onCloseTab: (id: string) => void;
@@ -16,6 +17,9 @@ interface TabStripProps {
     onCloseOtherTabs?: (id: string) => void;
     onCloseTabsToRight?: (id: string) => void;
     onTogglePinTab?: (id: string) => void;
+    onReopenClosedTab?: () => void;
+    onBookmarkAllTabs?: () => void;
+    onCloseDuplicateTabs?: () => void;
 }
 
 const TabStrip: React.FC<TabStripProps> = ({
@@ -23,6 +27,7 @@ const TabStrip: React.FC<TabStripProps> = ({
     activeTabId,
     splitTabId,
     pinnedTabIds = [],
+    canReopenClosedTab = false,
     onSwitchTab,
     onSplitTab,
     onCloseTab,
@@ -30,11 +35,15 @@ const TabStrip: React.FC<TabStripProps> = ({
     onDuplicateTab,
     onCloseOtherTabs,
     onCloseTabsToRight,
-    onTogglePinTab
+    onTogglePinTab,
+    onReopenClosedTab,
+    onBookmarkAllTabs,
+    onCloseDuplicateTabs
 }) => {
     const [editingId, setEditingId] = React.useState<string | null>(null);
     const [editValue, setEditValue] = React.useState('');
     const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; tabId: string } | null>(null);
+    const [newTabMenu, setNewTabMenu] = React.useState<{ x: number; y: number } | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTabRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -43,9 +52,12 @@ const TabStrip: React.FC<TabStripProps> = ({
     }, [activeTabId, tabs.length]);
 
     React.useEffect(() => {
-        const close = () => setContextMenu(null);
+        const close = () => {
+            setContextMenu(null);
+            setNewTabMenu(null);
+        };
         const closeOnEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') setContextMenu(null);
+            if (event.key === 'Escape') close();
         };
         window.addEventListener('click', close);
         window.addEventListener('blur', close);
@@ -83,12 +95,21 @@ const TabStrip: React.FC<TabStripProps> = ({
     const openContextMenu = (event: React.MouseEvent, tabId: string) => {
         event.preventDefault();
         event.stopPropagation();
+        setNewTabMenu(null);
         setContextMenu({ x: event.clientX, y: event.clientY, tabId });
+    };
+
+    const openNewTabMenu = (event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setContextMenu(null);
+        setNewTabMenu({ x: event.clientX, y: event.clientY });
     };
 
     const runMenuAction = (action: () => void) => {
         action();
         setContextMenu(null);
+        setNewTabMenu(null);
     };
 
     const orderedTabs = [...tabs].sort((a, b) => {
@@ -101,6 +122,7 @@ const TabStrip: React.FC<TabStripProps> = ({
     const contextPinned = contextTab ? pinnedTabIds.includes(contextTab.id) : false;
     const contextIndex = contextTab ? tabs.findIndex(tab => tab.id === contextTab.id) : -1;
     const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(tab => !pinnedTabIds.includes(tab.id));
+    const hasDuplicateTabs = new Set(tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean)).size < tabs.filter(tab => tab.type === 'browser' && tab.url).length;
 
     return (
         <div className="tab-strip">
@@ -127,12 +149,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                             title={tab.title}
                         >
                             {isPinned && <Pin size={10} className="pin-indicator" />}
-                            {faviconUrl ? (
-                                <img className="tab-favicon-img" src={faviconUrl} alt="" draggable={false} />
-                            ) : (
-                                <Globe size={15} className="tab-favicon" />
-                            )}
-
+                            {faviconUrl ? <img className="tab-favicon-img" src={faviconUrl} alt="" draggable={false} /> : <Globe size={15} className="tab-favicon" />}
                             {editingId === tab.id ? (
                                 <input
                                     className="tab-rename-input"
@@ -146,50 +163,23 @@ const TabStrip: React.FC<TabStripProps> = ({
                                     }}
                                     onClick={(e) => e.stopPropagation()}
                                 />
-                            ) : !isPinned && (
-                                <span className="tab-title">{tab.title || 'New Tab'}</span>
-                            )}
-
+                            ) : !isPinned && <span className="tab-title">{tab.title || 'New Tab'}</span>}
                             <div className="tab-actions">
                                 {tab.type === 'browser' && tab.id !== activeTabId && tab.id !== splitTabId && !isPinned && (
-                                    <button
-                                        className="tab-action-btn split-btn"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onSplitTab(tab.id);
-                                        }}
-                                        title="Open in Split View"
-                                    >
-                                        <Columns size={12} />
-                                    </button>
+                                    <button className="tab-action-btn split-btn" onClick={(e) => { e.stopPropagation(); onSplitTab(tab.id); }} title="Open in Split View"><Columns size={12} /></button>
                                 )}
-                                {canClose && (
-                                    <button
-                                        className="tab-action-btn close-btn"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onCloseTab(tab.id);
-                                        }}
-                                        title="Close tab"
-                                    >
-                                        <X size={13} />
-                                    </button>
-                                )}
+                                {canClose && <button className="tab-action-btn close-btn" onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }} title="Close tab"><X size={13} /></button>}
                             </div>
                         </div>
                     );
                 })}
             </div>
-            <button className="new-tab-btn" onClick={onCreateTab} title="New tab">
+            <button className="new-tab-btn" onClick={onCreateTab} onContextMenu={openNewTabMenu} title="New tab">
                 <Plus size={17} />
             </button>
 
             {contextMenu && contextTab && (
-                <div
-                    className="tab-context-menu"
-                    style={{ left: Math.min(contextMenu.x, window.innerWidth - 230), top: Math.min(contextMenu.y, window.innerHeight - 260) }}
-                    onClick={(event) => event.stopPropagation()}
-                >
+                <div className="tab-context-menu" style={{ left: Math.min(contextMenu.x, window.innerWidth - 230), top: Math.min(contextMenu.y, window.innerHeight - 260) }} onClick={(event) => event.stopPropagation()}>
                     <button onClick={() => runMenuAction(() => onTogglePinTab?.(contextTab.id))}><Pin size={14} /> {contextPinned ? 'Unpin tab' : 'Pin tab'}</button>
                     {contextTab.type === 'browser' && <button onClick={() => runMenuAction(() => onDuplicateTab?.(contextTab.id))}><Copy size={14} /> Duplicate tab</button>}
                     {contextTab.type === 'browser' && contextTab.id !== activeTabId && <button onClick={() => runMenuAction(() => onSplitTab(contextTab.id))}><PanelRight size={14} /> Open in split screen</button>}
@@ -198,6 +188,17 @@ const TabStrip: React.FC<TabStripProps> = ({
                     <button onClick={() => runMenuAction(() => onCloseOtherTabs?.(contextTab.id))}><RotateCcw size={14} /> Close other tabs</button>
                     <button disabled={!hasTabsToRight} onClick={() => runMenuAction(() => onCloseTabsToRight?.(contextTab.id))}><X size={14} /> Close tabs to the right</button>
                     <button disabled={contextPinned} onClick={() => runMenuAction(() => onCloseTab(contextTab.id))}><X size={14} /> Close tab</button>
+                </div>
+            )}
+
+            {newTabMenu && (
+                <div className="tab-context-menu" style={{ left: Math.min(newTabMenu.x, window.innerWidth - 230), top: Math.min(newTabMenu.y, window.innerHeight - 230) }} onClick={(event) => event.stopPropagation()}>
+                    <button onClick={() => runMenuAction(onCreateTab)}><Plus size={14} /> New tab</button>
+                    <button disabled={!canReopenClosedTab} onClick={() => runMenuAction(() => onReopenClosedTab?.())}><History size={14} /> Reopen closed tab</button>
+                    <button onClick={() => runMenuAction(() => onBookmarkAllTabs?.())}><BookmarkPlus size={14} /> Bookmark all tabs</button>
+                    <button disabled={!hasDuplicateTabs} onClick={() => runMenuAction(() => onCloseDuplicateTabs?.())}><Trash2 size={14} /> Close duplicate tabs</button>
+                    <span className="tab-context-divider" />
+                    <button onClick={() => runMenuAction(() => tabs.forEach(tab => tab.type === 'browser' && navigator.clipboard?.writeText(tabs.filter(t => t.type === 'browser').map(t => t.url).join('\n'))))}><Layers size={14} /> Copy all tab URLs</button>
                 </div>
             )}
         </div>
