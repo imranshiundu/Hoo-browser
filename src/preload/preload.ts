@@ -24,6 +24,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
     showDownloadInFolder: (id: string) => ipcRenderer.invoke('show-download-in-folder', id),
     clearDownloads: () => ipcRenderer.invoke('clear-downloads'),
     getHistory: () => ipcRenderer.invoke('get-history'),
+    clearHistory: () => ipcRenderer.invoke('clear-history'),
+    onHistoryCleared: (callback: () => void) => {
+        ipcRenderer.on('history-cleared', () => callback());
+    },
+    onPermissionRequest: (callback: (request: { requestId: string; permission: string; origin: string; description: string }) => void) => {
+        ipcRenderer.on('permission-request', (_event, request) => callback(request));
+    },
+    resolvePermission: (requestId: string, decision: 'allow' | 'block', remember: boolean) => ipcRenderer.invoke('resolve-permission', requestId, decision, remember),
+    getSitePermissions: () => ipcRenderer.invoke('get-site-permissions'),
+    clearSitePermissions: (key?: string) => ipcRenderer.invoke('clear-site-permissions', key),
+    getSiteZooms: () => ipcRenderer.invoke('get-site-zooms'),
+    clearSiteZooms: () => ipcRenderer.invoke('clear-site-zooms'),
+    restoreCrashedTabs: () => ipcRenderer.invoke('restore-crashed-tabs'),
+    exportBookmarks: (entries: any[]) => ipcRenderer.invoke('export-bookmarks', entries),
+    importBookmarks: () => ipcRenderer.invoke('import-bookmarks'),
     updatePrivacySettings: (settings: any) => ipcRenderer.invoke('update-privacy-settings', settings),
     getInitialData: () => ipcRenderer.invoke('get-initial-data'),
     getSystemMetrics: () => ipcRenderer.invoke('get-system-metrics'),

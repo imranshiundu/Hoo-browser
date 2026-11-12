@@ -293,6 +293,77 @@
     gap: 8px;
 }
 
+.history-popover header {
+    align-items: center;
+}
+
+.history-header-actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.history-header-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 0;
+    background: transparent;
+    color: #ff8b2b;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.history-header-actions button:hover { background: rgba(255, 255, 255, 0.08); }
+
+.history-search {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 6px 0;
+    padding: 6px 9px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.history-search input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+}
+
+.history-search input::placeholder { color: rgba(255, 255, 255, 0.3); }
+
+/* Footer action row inside popovers (e.g. "Manage bookmarks") */
+.popover-footer {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-footer button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #ff8b2b;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 5px 4px;
+    border-radius: 5px;
+}
+
+.popover-footer button:hover { background: rgba(255, 255, 255, 0.08); }
+
 .downloads-popover header strong,
 .history-popover header strong {
     font-size: 12px;

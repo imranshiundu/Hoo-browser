@@ -168,4 +168,66 @@ describe('StorageService', () => {
         StorageService.cleanupHistory('forever');
         expect(StorageService.load().history).toHaveLength(1);
     });
+
+    it('normalizes and persists site permission decisions', () => {
+        StorageService.save({
+            sitePermissions: {
+                'https://allowed.com|media': 'allow',
+                'https://blocked.com|notifications': 'block',
+                'junk|openExternal': 'allow',      // invalid origin + unknown permission
+                'https://x.com|media': 'maybe'     // invalid value
+            } as any,
+        });
+        const stored = StorageService.load().sitePermissions;
+        expect(stored).toEqual({
+            'https://allowed.com|media': 'allow',
+            'https://blocked.com|notifications': 'block'
+        });
+
+        StorageService.setPermissionDecision('https://allowed.com|media', 'block');
+        expect(StorageService.load().sitePermissions['https://allowed.com|media']).toBe('block');
+
+        StorageService.clearPermissionDecisions('https://allowed.com|media');
+        expect(StorageService.load().sitePermissions['https://allowed.com|media']).toBeUndefined();
+        expect(StorageService.load().sitePermissions['https://blocked.com|notifications']).toBe('block');
+
+        StorageService.clearPermissionDecisions();
+        expect(StorageService.load().sitePermissions).toEqual({});
+    });
+
+    it('normalizes and persists per-site zoom levels', () => {
+        StorageService.save({ siteZooms: { 'https://github.com': 110, 'junk': 999 } as any });
+        expect(StorageService.load().siteZooms).toEqual({ 'https://github.com': 110 });
+
+        StorageService.setSiteZoom('https://github.com', 150);
+        expect(StorageService.load().siteZooms['https://github.com']).toBe(150);
+
+        StorageService.removeSiteZoom('https://github.com');
+        expect(StorageService.load().siteZooms['https://github.com']).toBeUndefined();
+
+        StorageService.setSiteZoom('https://news.ycombinator.com', 90);
+        StorageService.clearSiteZooms();
+        expect(StorageService.load().siteZooms).toEqual({});
+    });
+
+    it('clears all history on demand', () => {
+        StorageService.save({ history: [{ url: 'https://x.com', timestamp: Date.now() }] });
+        StorageService.clearAllHistory();
+        expect(StorageService.load().history).toEqual([]);
+    });
+
+    it('survives a profile file that contains corrupt site data', () => {
+        StorageService.save({ tabs: [{ id: 'a', type: 'browser', title: 'A', url: 'https://a.com' }], activeTabId: 'a' });
+        const storageFile = StorageService.getStorageFile();
+        fs.writeFileSync(storageFile, JSON.stringify({
+            tabs: [{ id: 'a', type: 'browser', title: 'A', url: 'https://a.com' }],
+            activeTabId: 'a',
+            sitePermissions: 'garbage',
+            siteZooms: { 'nope': 'x' }
+        }), 'utf8');
+        const data = StorageService.load();
+        expect(data.sitePermissions).toEqual({});
+        expect(data.siteZooms).toEqual({});
+        expect(data.tabs).toHaveLength(1);
+    });
 });

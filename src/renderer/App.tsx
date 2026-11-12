@@ -4,12 +4,15 @@ import SettingsModal from './components/SettingsModal';
 import TitleBar from './components/TitleBar';
 import Home from './views/Home';
 import Browser from './views/Browser';
+import BookmarksView from './views/BookmarksView';
+import PermissionPrompt, { PendingPermissionRequest } from './components/PermissionPrompt';
 import TabStrip from './components/TabStrip';
 import { Tab, TabType } from './types';
 import { reorderTabsByIds } from '../main/tab-utils';
 import { AlertTriangle, X } from 'lucide-react';
 
 const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
+const LIBRARY_TAB_ID = 'hoo-library';
 const initialHomeTab = makeHomeTab();
 const PINNED_TABS_KEY = 'hoo:pinned-tabs';
 const BOOKMARK_KEY = 'hoo:bookmarks';
@@ -22,6 +25,7 @@ const App: React.FC = () => {
     const [splitTabId, setSplitTabId] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
     const [closedTabs, setClosedTabs] = useState<ClosedTab[]>([]);
+    const [permissionQueue, setPermissionQueue] = useState<PendingPermissionRequest[]>([]);
     const [pinnedTabIds, setPinnedTabIds] = useState<string[]>(() => {
         try { return JSON.parse(localStorage.getItem(PINNED_TABS_KEY) || '[]'); }
         catch { return []; }
@@ -52,6 +56,17 @@ const App: React.FC = () => {
         const tab = makeHomeTab();
         setTabs(prev => [...prev, tab]);
         setActiveTabId(tab.id);
+        setSplitTabId(null);
+        void window.electronAPI?.hideBrowserView?.();
+    };
+
+    // The bookmark manager lives in its own renderer tab (like Chrome's
+    // bookmark manager page). One instance at a time.
+    const openLibraryTab = (): void => {
+        setTabs(prev => prev.some(t => t.id === LIBRARY_TAB_ID)
+            ? prev
+            : [...prev, { id: LIBRARY_TAB_ID, type: 'library' as TabType, title: 'Bookmarks' }]);
+        setActiveTabId(LIBRARY_TAB_ID);
         setSplitTabId(null);
         void window.electronAPI?.hideBrowserView?.();
     };
@@ -264,6 +279,7 @@ const App: React.FC = () => {
     shortcutRef.current = (action: string): void => {
         switch (action) {
             case 'new-tab': openHomeTab(); break;
+            case 'open-library': openLibraryTab(); break;
             case 'close-tab': void handleCloseTab(activeTabId); break;
             case 'reopen-closed': void reopenClosedTab(); break;
             case 'next-tab': {
@@ -315,9 +331,25 @@ const App: React.FC = () => {
         })();
     };
 
+    const openLibraryRef = useRef<() => void>(() => undefined);
+    openLibraryRef.current = openLibraryTab;
+
+    useEffect(() => {
+        // The toolbar's "Manage bookmarks" entry opens the same library tab
+        // as the Ctrl+Shift+O menu accelerator.
+        const openLibrary = (): void => openLibraryRef.current();
+        document.addEventListener('hoo-open-library', openLibrary);
+        return () => document.removeEventListener('hoo-open-library', openLibrary);
+    }, []);
+
     useEffect(() => {
         window.electronAPI?.onUiShortcut?.((action) => shortcutRef.current(action));
         window.electronAPI?.onOpenUrlInNewTab?.((url) => openFromPageRef.current(url));
+        window.electronAPI?.onPermissionRequest?.((request) => {
+            setPermissionQueue(prev => prev.some(item => item.requestId === request.requestId)
+                ? prev
+                : [...prev, request]);
+        });
         window.electronAPI?.onTabLoadingState?.((tabId, loading) => {
             setLoadingIds(prev => {
                 const next = { ...prev };
@@ -393,6 +425,23 @@ const App: React.FC = () => {
         });
     }, []);
 
+    const resolvePermission = (requestId: string, decision: 'allow' | 'block', remember: boolean): void => {
+        void window.electronAPI?.resolvePermission?.(requestId, decision, remember);
+        setPermissionQueue(prev => prev.filter(item => item.requestId !== requestId));
+    };
+
+    const dismissPermission = (requestId: string): void => {
+        // Dismissing answers "block" without remembering, so the site asks
+        // again next time instead of being silently locked out forever.
+        void window.electronAPI?.resolvePermission?.(requestId, 'block', false);
+        setPermissionQueue(prev => prev.filter(item => item.requestId !== requestId));
+    };
+
+    const restoreCrashedTabs = async (): Promise<void> => {
+        await window.electronAPI?.restoreCrashedTabs?.();
+        setCrashNotice(null);
+    };
+
     const browserTabs = tabs.filter(t => t.type === 'browser');
     const activeLoading = !!loadingIds[activeTabId];
     const activeNavState = navState[activeTabId] || { canGoBack: true, canGoForward: true };
@@ -404,6 +453,7 @@ const App: React.FC = () => {
                 <div className="crash-notice" role="status">
                     <AlertTriangle size={15} />
                     <span>{crashNotice}</span>
+                    <button onClick={() => { void restoreCrashedTabs(); }} className="crash-restore-btn" title="Reopen the tabs that crashed">Restore tabs</button>
                     <button onClick={() => setCrashNotice(null)} title="Dismiss" aria-label="Dismiss crash notice"><X size={14} /></button>
                 </div>
             )}
@@ -447,11 +497,18 @@ const App: React.FC = () => {
                             onUpdateTabs={(): void => undefined}
                             onOpenSettings={() => setSettingsOpen(true)}
                         />
+                    ) : activeTab.type === 'library' ? (
+                        <BookmarksView onNavigate={(url): void => { void handleNavigateFromHome(url); }} />
                     ) : (
                         <Home onNavigate={handleNavigateFromHome} onOpenSettings={() => setSettingsOpen(true)} />
                     )}
                 </section>
             </main>
+            <PermissionPrompt
+                request={permissionQueue.length ? permissionQueue[0] : null}
+                onResolve={resolvePermission}
+                onDismiss={dismissPermission}
+            />
             <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );

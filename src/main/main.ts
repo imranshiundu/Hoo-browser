@@ -13,6 +13,9 @@ import { shouldBlockForLowData } from "./network-policy";
 import { setupDownloadManager, openDownloadFolder } from "./download-manager";
 import { setupBrowserContextMenu } from "./browser-context-menu";
 import { createTabIdFactory, stepZoomFactor, zoomPercent, crashReasonLabel, reorderTabsByIds, clampWindowState } from "./tab-utils";
+import { originFromUrl, decisionKey, describePermission, resolvePermissionDecision, permissionRows } from "./permissions";
+import { serializeNetscapeBookmarks, parseNetscapeBookmarks } from "./bookmarks-io";
+import { zoomPercentToFactor } from "./zoom-store";
 
 app.setName("Hoo Browser");
 // One browser, one process. A second `hoo-browser` launch now focuses the
@@ -69,6 +72,20 @@ const nextTabId = createTabIdFactory();
 const zoomByTab: Map<string, number> = new Map();
 const audibleTabs: Set<string> = new Set();
 const mutedTabs: Set<string> = new Set();
+
+// Site permission prompts that are waiting for the user to click
+// Allow/Block in the shell. Requests the user never answers are denied
+// after two minutes so a forgotten bubble cannot pin renderer state.
+const nextPermissionRequestId = createTabIdFactory();
+interface PendingPermissionRequest {
+    tabId: string;
+    origin: string;
+    permission: string;
+    callback: (allowed: boolean) => void;
+    timer: NodeJS.Timeout;
+}
+const pendingPermissionRequests = new Map<string, PendingPermissionRequest>();
+const PERMISSION_PROMPT_TIMEOUT_MS = 120_000;
 
 let persistentData = StorageService.load();
 
@@ -212,6 +229,13 @@ function cleanupTabRuntimeState(tabId: string): void {
     zoomByTab.delete(tabId);
     audibleTabs.delete(tabId);
     mutedTabs.delete(tabId);
+    // Deny any permission prompt the user never answered for this tab.
+    pendingPermissionRequests.forEach((pending, requestId): void => {
+        if (pending.tabId !== tabId) return;
+        clearTimeout(pending.timer);
+        pendingPermissionRequests.delete(requestId);
+        try { pending.callback(false); } catch { /* callback is user code */ }
+    });
 }
 
 function attachViewHandlers(tabId: string, view: BrowserView): void {
@@ -240,12 +264,49 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
 
     view.webContents.session.setPermissionRequestHandler((webContents, permission, callback): void => {
         const url = webContents.getURL();
-        if (privacySettings.deepSpoof && url.includes('web.whatsapp.com') && permission === 'media') {
-            console.log(`[DeepSpoof] Auto-granting media to WhatsApp`);
-            callback(true);
+        const origin = originFromUrl(url);
+        // Stored decisions answer instantly; the WhatsApp DeepSpoof media
+        // exemption survives so calls keep working in compatibility mode.
+        const resolution = resolvePermissionDecision(
+            StorageService.load().sitePermissions || {},
+            origin,
+            permission,
+            { deepSpoofWhatsappMedia: privacySettings.deepSpoof }
+        );
+        if (resolution !== 'ask') {
+            callback(resolution === 'allow');
             return;
         }
-        callback(false);
+        // Ask the user, like every real browser. The shell shows a bubble
+        // anchored under the toolbar and replies over 'resolve-permission'.
+        if (!mainWindow || mainWindow.isDestroyed() || !origin) {
+            callback(false);
+            return;
+        }
+        const requestId = nextPermissionRequestId();
+        const timer = setTimeout((): void => {
+            if (pendingPermissionRequests.delete(requestId)) callback(false);
+        }, PERMISSION_PROMPT_TIMEOUT_MS);
+        pendingPermissionRequests.set(requestId, { tabId, origin, permission, callback, timer });
+        sendToShell('permission-request', {
+            requestId,
+            permission,
+            origin,
+            description: describePermission(permission)
+        });
+    });
+
+    view.webContents.on('did-navigate', (_event, url): void => {
+        // Re-apply the remembered zoom for this site on every main-frame
+        // navigation; per-tab state alone lost the preference.
+        const origin = originFromUrl(url);
+        if (!origin) return;
+        const percent = (StorageService.load().siteZooms || {})[origin];
+        if (percent === undefined || percent === 100) return;
+        const factor = zoomPercentToFactor(percent);
+        view.webContents.setZoomFactor(factor);
+        zoomByTab.set(tabId, factor);
+        if (tabId === activeTabId) sendToShell('zoom-changed', tabId, Math.round(percent));
     });
 
     view.webContents.on('will-navigate', (event, targetUrl): void => {
@@ -527,8 +588,19 @@ ipcMain.handle('get-performance-snapshot', async (): Promise<any> => getPerforma
 function applyPrivacyToSession(ses: Electron.Session): void {
     const filter = { urls: ['<all_urls>'] };
 
-    ses.setPermissionCheckHandler((_webContents, permission): boolean => {
-        return permission === 'media' ? true : false;
+    ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin): boolean => {
+        // Synchronous checks (navigator.permissions.query) answer from the
+        // stored decisions only — they can never prompt. Unknown requests
+        // report as available so the page triggers a real request, which
+        // our request handler turns into a visible prompt instead of the
+        // old unconditional "yes to every media query" hole.
+        const origin = originFromUrl(requestingOrigin);
+        if (origin) {
+            const stored = (StorageService.load().sitePermissions || {})[decisionKey(origin, permission)];
+            if (stored === 'block') return false;
+            if (stored === 'allow') return true;
+        }
+        return permission === 'media' || permission === 'geolocation' || permission === 'notifications' || (permission as string) === 'display-capture';
     });
 
     ses.webRequest.onBeforeRequest(filter, (details, callback): void => {
@@ -981,6 +1053,13 @@ function applyZoomToActiveView(direction: 'in' | 'out' | 'reset'): void {
     const next = stepZoomFactor(view.webContents.getZoomFactor(), direction);
     view.webContents.setZoomFactor(next);
     zoomByTab.set(activeTabId, next);
+    // Remember the choice per site (reset clears the override) so every
+    // future visit to this origin reopens at the same zoom.
+    const origin = originFromUrl(view.webContents.getURL());
+    if (origin) {
+        if (next === 1) StorageService.removeSiteZoom(origin);
+        else StorageService.setSiteZoom(origin, zoomPercent(next));
+    }
     sendToShell('zoom-changed', activeTabId, zoomPercent(next));
 }
 
@@ -1035,6 +1114,92 @@ ipcMain.handle('get-history', async (): Promise<any[]> => {
     return [...(data.history || [])].slice(-60).reverse();
 });
 
+ipcMain.handle('clear-history', async (): Promise<void> => {
+    StorageService.clearAllHistory();
+    sendToShell('history-cleared');
+});
+
+// ---- Site permissions ----------------------------------------------------
+
+ipcMain.handle('resolve-permission', async (_event, requestId: string, decision: 'allow' | 'block', remember: boolean): Promise<boolean> => {
+    const pending = pendingPermissionRequests.get(requestId);
+    if (!pending) return false; // already answered, timed out, or tab closed
+    clearTimeout(pending.timer);
+    pendingPermissionRequests.delete(requestId);
+    if (remember) StorageService.setPermissionDecision(decisionKey(pending.origin, pending.permission), decision);
+    pending.callback(decision === 'allow');
+    return true;
+});
+
+ipcMain.handle('get-site-permissions', async (): Promise<any[]> => permissionRows(StorageService.load().sitePermissions || {}));
+
+ipcMain.handle('clear-site-permissions', async (_event, key?: string): Promise<void> => {
+    StorageService.clearPermissionDecisions(typeof key === 'string' && key ? key : undefined);
+});
+
+// ---- Site zoom levels ----------------------------------------------------
+
+ipcMain.handle('get-site-zooms', async (): Promise<Record<string, number>> => StorageService.load().siteZooms || {});
+
+ipcMain.handle('clear-site-zooms', async (): Promise<void> => {
+    StorageService.clearSiteZooms();
+    zoomByTab.clear();
+});
+
+// ---- Crash recovery ------------------------------------------------------
+
+ipcMain.handle('restore-crashed-tabs', async (): Promise<number> => {
+    const data = StorageService.load();
+    const crashed = data.crashedTabs || [];
+    let restored = 0;
+    for (const record of crashed) {
+        if (record.url && /^https?:\/\//i.test(record.url)) {
+            await openUrlInNewTabInternal(record.url);
+            restored += 1;
+        }
+    }
+    if (crashed.length) StorageService.save({ crashedTabs: [] });
+    return restored;
+});
+
+// ---- Bookmark import/export ----------------------------------------------
+
+ipcMain.handle('export-bookmarks', async (_event, entries: any[]): Promise<{ ok: boolean; path?: string; error?: string }> => {
+    if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'Hoo is shutting down.' };
+    const html = serializeNetscapeBookmarks(Array.isArray(entries) ? entries : []);
+    if (!html.includes('HREF=')) return { ok: false, error: 'No bookmarks to export yet.' };
+    const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Export bookmarks',
+        defaultPath: 'hoo-bookmarks.html',
+        filters: [{ name: 'HTML bookmarks', extensions: ['html'] }]
+    });
+    if (result.canceled || !result.filePath) return { ok: false, error: 'Export cancelled.' };
+    try {
+        fs.writeFileSync(result.filePath, html, 'utf8');
+        return { ok: true, path: result.filePath };
+    } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Could not write the file.' };
+    }
+});
+
+ipcMain.handle('import-bookmarks', async (): Promise<{ ok: boolean; bookmarks?: any[]; error?: string }> => {
+    if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'Hoo is shutting down.' };
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Import bookmarks',
+        properties: ['openFile'],
+        filters: [{ name: 'HTML bookmarks', extensions: ['html', 'htm'] }]
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false, error: 'Import cancelled.' };
+    try {
+        const html = fs.readFileSync(result.filePaths[0], 'utf8');
+        const parsed = parseNetscapeBookmarks(html);
+        if (!parsed.length) return { ok: false, error: 'No usable bookmarks found in that file.' };
+        return { ok: true, bookmarks: parsed };
+    } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Could not read the file.' };
+    }
+});
+
 // ---- Application menu ---------------------------------------------------
 // Menu accelerators are the only reliable way to make browser shortcuts work
 // while a web page has focus: shell-side keydown listeners never see keys that
@@ -1074,6 +1239,7 @@ function setupAppMenu(): void {
                 { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: (): void => sendUiShortcut('close-tab') },
                 { label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T', click: (): void => sendUiShortcut('reopen-closed') },
                 { type: 'separator' },
+                { label: 'Bookmark Manager', accelerator: 'CmdOrCtrl+Shift+O', click: (): void => sendUiShortcut('open-library') },
                 { label: 'Downloads', accelerator: 'CmdOrCtrl+J', click: (): void => sendUiShortcut('downloads') },
                 { label: 'Find in Page', accelerator: 'CmdOrCtrl+F', click: (): void => sendUiShortcut('find') },
                 { label: 'Focus Address Bar', accelerator: 'CmdOrCtrl+L', click: (): void => sendUiShortcut('focus-address') },
@@ -1116,7 +1282,9 @@ function setupAppMenu(): void {
             label: 'History',
             submenu: [
                 { label: 'Back', accelerator: 'Alt+Left', click: (): void => runViewAction((view): void => view.webContents.navigationHistory.goBack()) },
-                { label: 'Forward', accelerator: 'Alt+Right', click: (): void => runViewAction((view): void => view.webContents.navigationHistory.goForward()) }
+                { label: 'Forward', accelerator: 'Alt+Right', click: (): void => runViewAction((view): void => view.webContents.navigationHistory.goForward()) },
+                { type: 'separator' },
+                { label: 'Clear Browsing History', click: (): void => { void dialog.showMessageBox(mainWindow!, { type: 'warning', title: 'Clear history', message: 'Clear all browsing history?', detail: 'This removes every visited-page entry stored in the Hoo profile. Bookmarks and saved site permissions are kept.', buttons: ['Clear history', 'Cancel'], defaultId: 0, cancelId: 1 }).then(({ response }): void => { if (response === 0) { StorageService.clearAllHistory(); sendToShell('history-cleared'); } }); } }
             ]
         },
         {

@@ -77,6 +77,20 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
+ * Case-insensitive history search: a query matches if the page title or
+ * URL contains it. Empty/whitespace queries return the list unchanged.
+ * Used by the toolbar history popover.
+ */
+export function filterHistoryEntries<T extends { title: string; url: string }>(entries: T[], query: string): T[] {
+    const needle = (query || '').trim().toLowerCase();
+    if (!needle) return entries;
+    return entries.filter(entry =>
+        (entry.title || '').toLowerCase().includes(needle) ||
+        (entry.url || '').toLowerCase().includes(needle)
+    );
+}
+
+/**
  * Reorder tab records to match the renderer's drag-and-drop order.
  * Unknown/duplicate ids are ignored; known ids keep their records, and any
  * tabs the renderer did not mention are appended so nothing is lost.

@@ -160,6 +160,14 @@ body {
   background: rgba(255, 106, 0, 0.18);
 }
 
+.crash-notice .crash-restore-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 106, 0, 0.22);
+  border: 1px solid rgba(255, 106, 0, 0.4);
+}
+
 /* Glass Utility */
 .glass {
   background: var(--glass-bg);

@@ -6,6 +6,7 @@ import {
     createTabIdFactory,
     findStatusText,
     formatBytes,
+    filterHistoryEntries,
     reorderTabsByIds,
     stepZoomFactor,
     zoomPercent
@@ -167,5 +168,40 @@ describe('clampWindowState', () => {
         );
         expect(restored.maximized).toBe(true);
         expect(restored.fullscreen).toBe(true);
+    });
+});
+
+describe('filterHistoryEntries', () => {
+    const entries = [
+        { title: 'GitHub — imranshiundu', url: 'https://github.com/imranshiundu' },
+        { title: 'DuckDuckGo', url: 'https://duckduckgo.com' },
+        { title: 'Hacker News', url: 'https://news.ycombinator.com/news' }
+    ];
+
+    it('matches titles and URLs case-insensitively', () => {
+        expect(filterHistoryEntries(entries, 'GIT')).toHaveLength(1);
+        expect(filterHistoryEntries(entries, 'ycombinator')).toHaveLength(1);
+        expect(filterHistoryEntries(entries, 'DUCK')).toHaveLength(1);
+    });
+
+    it('matches anywhere in the string', () => {
+        // "Hacker News" title and the news.ycombinator.com URL belong to
+        // the same entry; "GitHub" matches nothing here.
+        expect(filterHistoryEntries(entries, 'news')).toHaveLength(1);
+        expect(filterHistoryEntries(entries, 'github')).toHaveLength(1);
+    });
+
+    it('returns everything for empty or whitespace queries', () => {
+        expect(filterHistoryEntries(entries, '')).toHaveLength(3);
+        expect(filterHistoryEntries(entries, '   ')).toHaveLength(3);
+    });
+
+    it('returns nothing when nothing matches', () => {
+        expect(filterHistoryEntries(entries, 'zzz-not-here')).toEqual([]);
+    });
+
+    it('survives entries with missing titles', () => {
+        const weird = [{ title: undefined as any, url: 'https://x.com' }];
+        expect(filterHistoryEntries(weird, 'x.com')).toHaveLength(1);
     });
 });

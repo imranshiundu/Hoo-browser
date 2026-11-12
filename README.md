@@ -55,11 +55,15 @@ apps never touch:
 
 ## Current status
 
-Version: `v0.4 Feels Like A Browser`
+Version: `v0.5 Ask First`
 
 The current codebase includes working early versions of:
 
 - Chromium rendering through Electron `BrowserView`
+- **site permission prompts**: when a page asks for the camera, microphone, location, notifications, screen capture or similar, a bubble under the toolbar lets you Allow or Block (optionally remembering the decision), saved decisions answer instantly, and Settings lists every stored decision so you can change your mind
+- **per-site zoom memory**: Ctrl+= / Ctrl+- choices are remembered per origin and re-applied on every future visit (reset with Ctrl+0, clear everything in Settings)
+- **a real bookmark manager**: the previously unreachable library view is now a tab (Ctrl+Shift+O) sharing the same storage as the toolbar star, with folders, search, and standard **Netscape HTML bookmark import/export** so you can move bookmarks to and from Firefox/Chrome
+- **searchable, clearable history**: the toolbar history popover filters by title/URL as you type and can wipe the list; the app menu History submenu has a Clear Browsing History action
 - tabs with persisted basic state and a documented lifecycle
 - **drag-to-reorder tabs** (pinned tabs stay locked to the left edge, order survives restarts)
 - navigation controls and DuckDuckGo-first home search
@@ -74,19 +78,18 @@ The current codebase includes working early versions of:
 - right-click context menu inside web pages (copy, search selection, open link, save image)
 - loading feedback: tab spinners, an indeterminate progress bar, a working stop button, and back/forward buttons that disable themselves
 - audio tab indicators with click-to-mute, link-hover URL preview, window title that follows the page
-- crash handling: a crashed renderer shows a recoverable error page instead of a silent blank rectangle, **plus a session-recovery notice on the next launch**
+- crash handling: a crashed renderer shows a recoverable error page instead of a silent blank rectangle, **plus a session-recovery notice on the next launch with a one-click "Restore tabs" button**
 - **double-click the title bar to maximize** (desktop convention)
 - **macOS dock click reopens a window** instead of leaving a zombie process
 - isolated web-app profiles (persistent partitions per app)
-- privacy toggles, bookmarks, RSS reader
+- privacy toggles and bookmark library (folder manager with import/export)
 - simple ad/tracker host blocking with compatibility allowlist
 - HTTPS upgrade for HTTP URLs, optional user-agent control
 - local storage through Electron `safeStorage` where available
-- OpenClaw AI panel (local gateway, explicit user-gated context)
 - Linux install/update scripts and cross-platform packaging metadata
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — the `v0.3 Stable Tabs` milestone (navigation state, find, downloads, crash handling, app-wide shortcuts) has shipped, and `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle) has shipped on top of it. The next milestone is `v0.5 Web Apps` / permissions UX.
+The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), and `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear) have shipped. The next milestone is `v0.6 Web Apps` / permissions UX polish.
 
 ## Test suite
 
@@ -109,9 +112,12 @@ Covered modules today:
 | --- | --- |
 | `privacy-filters.ts` | request blocking rules, compatibility-host exemptions, hard-blocked scam hosts, third-party header stripping, URL safety checks |
 | `network-policy.ts` | low-data/lite/extreme/compatibility mode behavior for fonts, media, beacons, prefetch and tracker hosts |
-| `storage.ts` | profile normalization, corrupt-tab filtering, active-tab validation, atomic save/load round-trips |
+| `storage.ts` | profile normalization, corrupt-tab filtering, active-tab validation, atomic save/load round-trips, site permission/zoom persistence |
 | `download-manager.ts` | filename sanitization and executable danger hints |
-| `tab-utils.ts` | collision-free tab ids, zoom clamping/stepping, find-bar status text, crash reason labels, byte formatting, drag-reorder id mapping, window-state clamping |
+| `tab-utils.ts` | collision-free tab ids, zoom clamping/stepping, find-bar status text, crash reason labels, byte formatting, drag-reorder id mapping, window-state clamping, history search filtering |
+| `permissions.ts` | per-origin permission decisions, decision sanitization, DeepSpoof exemption precedence (stored blocks win) |
+| `zoom-store.ts` | per-site zoom clamping and origin-keyed persistence sanitization |
+| `bookmarks-io.ts` | Netscape HTML bookmark serialization/parsing, entity escaping, folder round-trips, dedupe-merging with caps |
 | `types.ts` (renderer) | privacy-preserving site-initial avatars used instead of third-party favicon services |
 | `branding assets` | the generated PNG/ICO/ICNS icon set exists so builds can never silently lose the app icon again |
 
@@ -198,16 +204,17 @@ These are tracked honestly instead of hidden:
 
 1. The ad/tracker blocker uses a curated static list, not maintained filter lists.
 2. Random user-agent rotation can make fingerprinting worse if used incorrectly.
-3. Permission prompts for camera, microphone, notifications, location, and clipboard need a visible Hoo-controlled UX.
-4. ~~Crash recovery needs further implementation~~ Crashed tabs now show a recoverable error page, are recorded, and a session-recovery notice appears on the next launch; a one-click "restore all crashed tabs" UX is still missing.
-5. ~~The project has no automated tests yet.~~ Main-process logic and key renderer helpers are unit-tested; full component tests are still missing.
-6. RSS currently depends on renderer-side fetching patterns that should move to the main process.
+3. ~~Permission prompts need a visible UX~~ **Done in v0.5**: sites now get an Allow/Block bubble with remember-for-site, a synchronous check handler that honors stored decisions, and a Settings manager for stored decisions. Per-site *exceptions UI inside the page* (page-info bubble) is still future work.
+4. ~~Crash recovery needs further implementation~~ Crashed tabs now show a recoverable error page, are recorded, and a session-recovery notice with a **one-click Restore tabs button** appears on the next launch.
+5. ~~The project has no automated tests yet.~~ 142 unit tests cover main-process logic and key renderer helpers; full component tests are still missing.
+6. RSS currently depends on renderer-side fetching patterns that should move to the main process. The RSS view itself is still not reachable from the UI (planned for the v0.6 library).
 7. Cloud sync needs stronger conflict handling and clearer data boundaries.
 8. IPC actions need tighter validation as the browser grows.
 9. AppImage/deb builds need clean-machine verification.
-10. Zoom level is remembered per tab in memory only; per-site zoom persistence is not implemented yet.
-11. Bookmark folders, search inside history, and bookmarks import/export are not implemented yet.
+10. ~~Zoom level is remembered per tab in memory only~~ **Done in v0.5**: zoom is remembered per site in the profile and re-applied on navigation.
+11. ~~Bookmark folders, search inside history, and bookmarks import/export are not implemented~~ **Done in v0.5**: the bookmark manager tab has folders, search, and Netscape HTML import/export; the history popover has search and clear. Bookmark *backup automation* (scheduled exports) is not implemented.
 12. Tab drag-reorder is HTML5-based; dragging a tab out of the strip to tear it into a new window is not supported yet.
+13. Several secondary views shipped in earlier milestones (RSS reader, performance dashboard, command palette, extensions stub) are still not wired into the shell; they are dead code until the v0.6 library work, and the README no longer claims them as reachable features.
 
 ## Keyboard map
 
@@ -225,6 +232,7 @@ web page has focus — not only while the Hoo UI is focused:
 | Alt+← / Alt+→ | back / forward |
 | Ctrl+F | find in page (live match counts) |
 | Ctrl+J | downloads panel |
+| Ctrl+Shift+O | bookmark manager (library tab) |
 | Ctrl+= / Ctrl+- / Ctrl+0 | zoom in / out / actual size |
 | F12 / Ctrl+Shift+I | developer tools for the page |
 | Ctrl+P | print page |

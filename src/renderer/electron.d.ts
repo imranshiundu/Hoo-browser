@@ -73,6 +73,28 @@ declare global {
         timestamp: number;
     }
 
+    interface HooPermissionRequest {
+        requestId: string;
+        permission: string;
+        origin: string;
+        description: string;
+    }
+
+    interface HooSitePermissionRow {
+        key: string;
+        origin: string;
+        permission: string;
+        decision: 'allow' | 'block';
+    }
+
+    interface HooBookmarkEntry {
+        id: string;
+        title: string;
+        url: string;
+        folder?: string;
+        addedAt?: number;
+    }
+
     interface ElectronAPI {
         navigateTab: (tabId: string, url: string) => Promise<void>;
         setMosaicView: (tabId1: string, tabId2: string) => Promise<{ activeTabId: string, splitTabId: string }>;
@@ -97,6 +119,17 @@ declare global {
         showDownloadInFolder: (id: string) => Promise<boolean>;
         clearDownloads: () => Promise<void>;
         getHistory: () => Promise<HooHistoryEntry[]>;
+        clearHistory: () => Promise<void>;
+        onHistoryCleared: (callback: () => void) => void;
+        onPermissionRequest: (callback: (request: HooPermissionRequest) => void) => void;
+        resolvePermission: (requestId: string, decision: 'allow' | 'block', remember: boolean) => Promise<boolean>;
+        getSitePermissions: () => Promise<HooSitePermissionRow[]>;
+        clearSitePermissions: (key?: string) => Promise<void>;
+        getSiteZooms: () => Promise<Record<string, number>>;
+        clearSiteZooms: () => Promise<void>;
+        restoreCrashedTabs: () => Promise<number>;
+        exportBookmarks: (entries: HooBookmarkEntry[]) => Promise<{ ok: boolean; path?: string; error?: string }>;
+        importBookmarks: () => Promise<{ ok: boolean; bookmarks?: HooBookmarkEntry[]; error?: string }>;
         navigateTo: (url: string) => Promise<string | null>;
         updatePrivacySettings: (settings: PrivacySettings) => Promise<PrivacySettings>;
         getInitialData: () => Promise<{ tabs: any[], history: any[], downloads?: any[], crashedTabs?: any[], settings: PrivacySettings, activeTabId?: string | null }>;

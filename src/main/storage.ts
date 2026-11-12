@@ -1,6 +1,8 @@
 import { app, safeStorage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import { normalizePermissionDecisions, PermissionDecisionMap } from './permissions';
+import { normalizeSiteZooms, SiteZoomMap } from './zoom-store';
 
 export interface DownloadRecord {
     id: string;
@@ -57,6 +59,10 @@ export interface StorageData {
         maximized?: boolean;
         fullscreen?: boolean;
     };
+    /** Remembered site permission decisions (`origin|permission` -> allow/block). */
+    sitePermissions?: PermissionDecisionMap;
+    /** Remembered per-site zoom levels (`origin` -> percent). */
+    siteZooms?: SiteZoomMap;
     lastUpdated: number;
 }
 
@@ -77,6 +83,8 @@ const defaultData: StorageData = {
         sleepIdleTabsAfterMinutes: 15
     },
     activeTabId: 'home',
+    sitePermissions: {},
+    siteZooms: {},
     lastUpdated: Date.now()
 };
 
@@ -98,7 +106,9 @@ export function normalizeStorageData(data: Partial<StorageData>): StorageData {
         settings: { ...defaultData.settings, ...(data.settings || {}) },
         history: data.history || [],
         downloads: data.downloads || [],
-        crashedTabs: data.crashedTabs || []
+        crashedTabs: data.crashedTabs || [],
+        sitePermissions: normalizePermissionDecisions(data.sitePermissions),
+        siteZooms: normalizeSiteZooms(data.siteZooms)
     };
 }
 
@@ -214,6 +224,50 @@ export class StorageService {
             if (lifecycle === 'loaded') tab.lastActiveAt = Date.now();
             this.save({ tabs: data.tabs });
         }
+    }
+
+    /** Remember a permission decision for one site (origin|permission key). */
+    static setPermissionDecision(key: string, decision: 'allow' | 'block'): void {
+        const data = this.load();
+        const next = { ...(data.sitePermissions || {}), [key]: decision };
+        this.save({ sitePermissions: normalizePermissionDecisions(next) });
+    }
+
+    /** Forget one or every stored permission decision. */
+    static clearPermissionDecisions(key?: string): void {
+        const data = this.load();
+        if (!key) {
+            this.save({ sitePermissions: {} });
+            return;
+        }
+        const next = { ...(data.sitePermissions || {}) };
+        delete next[key];
+        this.save({ sitePermissions: next });
+    }
+
+    /** Remember one site's zoom level (percent) or clear every stored one. */
+    static setSiteZoom(origin: string, percent: number): void {
+        const data = this.load();
+        const next = { ...(data.siteZooms || {}), [origin]: Math.round(percent) };
+        this.save({ siteZooms: normalizeSiteZooms(next) });
+    }
+
+    static clearSiteZooms(): void {
+        this.save({ siteZooms: {} });
+    }
+
+    /** Forget one site's zoom override (falls back to 100%). */
+    static removeSiteZoom(origin: string): void {
+        const data = this.load();
+        if (!data.siteZooms || data.siteZooms[origin] === undefined) return;
+        const next = { ...data.siteZooms };
+        delete next[origin];
+        this.save({ siteZooms: next });
+    }
+
+    /** Drop the whole browsing history list. */
+    static clearAllHistory(): void {
+        this.save({ history: [] });
     }
 
     static wipeAll() {

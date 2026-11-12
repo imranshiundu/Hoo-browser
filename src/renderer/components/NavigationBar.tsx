@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield, Search, MoreHorizontal, Columns2, PanelRightClose, History, Clock, FolderOpen, ExternalLink, FileWarning } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Search, Star, BookOpen, Download, Clock, Shield, MoreHorizontal, Settings, FolderOpen, ExternalLink, FileWarning, Home, Columns2, PanelRightClose, Sparkles, History, BookMarked, Trash2 } from 'lucide-react';
+import { filterHistoryEntries } from '../../main/tab-utils';
 import { Tab } from '../types';
 import { formatBytes } from '../../main/tab-utils';
 
@@ -78,6 +79,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const [splitOpen, setSplitOpen] = useState(false);
     const [downloadsOpen, setDownloadsOpen] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [historySearch, setHistorySearch] = useState('');
     const [bookmarks, setBookmarks] = useState<Array<{ id: string; title: string; url: string }>>([]);
     const [downloads, setDownloads] = useState<DownloadEntry[]>([]);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -92,6 +94,12 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         } catch {
             setBookmarks([]);
         }
+    };
+
+    const notifyBookmarksChanged = (): void => {
+        // The bookmark manager tab and the star button live in different
+        // components; this keeps them showing the same list.
+        document.dispatchEvent(new Event('hoo-bookmarks-changed'));
     };
 
     useEffect(() => loadBookmarks(), [url]);
@@ -186,6 +194,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             const next = bookmarks.filter(item => item.url !== url);
             localStorage.setItem(BOOKMARK_KEY, JSON.stringify(next));
             setBookmarks(next);
+            notifyBookmarksChanged();
             return;
         }
         let title = url;
@@ -200,6 +209,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         ].slice(0, 40);
         localStorage.setItem(BOOKMARK_KEY, JSON.stringify(next));
         setBookmarks(next);
+        notifyBookmarksChanged();
         setBookmarksOpen(true);
     };
 
@@ -229,6 +239,18 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const handleClearDownloads = (): void => {
         void window.electronAPI?.clearDownloads?.();
         setDownloads([]);
+    };
+
+    const openBookmarkManager = (): void => {
+        setBookmarksOpen(false);
+        setToolsOpen(false);
+        document.dispatchEvent(new Event('hoo-open-library'));
+    };
+
+    const handleClearHistory = (): void => {
+        if (!window.confirm('Clear all browsing history?')) return;
+        void window.electronAPI?.clearHistory?.();
+        setHistory([]);
     };
 
     return (
@@ -319,6 +341,11 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                                     <small>{item.url}</small>
                                 </button>
                             ))}
+                            <footer className="popover-footer">
+                                <button onClick={openBookmarkManager} title="Open the full bookmark manager (Ctrl+Shift+O)">
+                                    <BookMarked size={13} /> Manage bookmarks
+                                </button>
+                            </footer>
                         </div>
                     )}
                 </div>
@@ -369,11 +396,30 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                     </button>
                     {historyOpen && (
                         <div className="history-popover">
-                            <header><strong>Recent history</strong><small>Cleared automatically per your retention setting</small></header>
+                            <header>
+                                <strong>Recent history</strong>
+                                <div className="history-header-actions">
+                                    {history.length > 0 && <button onClick={handleClearHistory} title="Clear all browsing history"><Trash2 size={13} /> Clear</button>}
+                                </div>
+                            </header>
+                            {history.length > 0 && (
+                                <div className="history-search">
+                                    <Search size={13} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search history..."
+                                        value={historySearch}
+                                        onChange={(e) => setHistorySearch(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                            )}
                             {history.length === 0 ? (
                                 <span className="empty-panel">Pages you visit will show up here.</span>
-                            ) : history.map((entry, index) => (
-                                <button key={`${entry.timestamp}-${index}`} className="history-row" onClick={() => { setHistoryOpen(false); onNavigate(entry.url); }}>
+                            ) : filterHistoryEntries(history, historySearch).length === 0 ? (
+                                <span className="empty-panel">No history matches “{historySearch}”.</span>
+                            ) : filterHistoryEntries(history, historySearch).map((entry, index) => (
+                                <button key={`${entry.timestamp}-${index}`} className="history-row" onClick={() => { setHistoryOpen(false); setHistorySearch(''); onNavigate(entry.url); }}>
                                     <span className="history-title">{entry.title || entry.url}</span>
                                     <small className="history-url">{entry.url}</small>
                                 </button>
@@ -391,6 +437,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                     {toolsOpen && (
                         <div className="tools-popover">
                             <button onClick={() => { setToolsOpen(false); onNavigate('https://duck.ai/'); }}><Sparkles size={15} /> Duck.ai</button>
+                            <button onClick={openBookmarkManager}><BookMarked size={15} /> Bookmark manager</button>
                             <button onClick={() => { setToolsOpen(false); void refreshDownloads(); setDownloadsOpen(true); }}><Download size={15} /> Downloads</button>
                             <button onClick={() => { setToolsOpen(false); void refreshHistory(); setHistoryOpen(true); }}><History size={15} /> Recent history</button>
                             <button onClick={() => { setToolsOpen(false); onOpenSettings?.(); }}><Settings size={15} /> Settings</button>

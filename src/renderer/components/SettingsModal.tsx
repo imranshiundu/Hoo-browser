@@ -1,6 +1,6 @@
 import React from 'react';
 import './SettingsModal.css';
-import { X, Shield, Download, RotateCw, Trash2, Wifi, PlayCircle, Type, Cookie, History, Brain, Lock, CheckCircle2, AlertTriangle, Zap, RefreshCw } from 'lucide-react';
+import { X, Shield, Download, RotateCw, Trash2, Wifi, PlayCircle, Type, Cookie, History, Brain, Lock, CheckCircle2, AlertTriangle, Zap, RefreshCw, Camera, Eye } from 'lucide-react';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -13,6 +13,24 @@ type UpdateState = {
     details?: string;
 };
 
+interface SitePermissionRow {
+    key: string;
+    origin: string;
+    permission: string;
+    decision: 'allow' | 'block';
+}
+
+const PERMISSION_LABELS: Record<string, string> = {
+    'media': 'Camera & microphone',
+    'geolocation': 'Location',
+    'notifications': 'Notifications',
+    'clipboard-sanitized-read': 'Clipboard read',
+    'midi': 'MIDI devices',
+    'pointerLock': 'Mouse lock',
+    'fullscreen': 'Fullscreen',
+    'display-capture': 'Screen capture'
+};
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [adShield, setAdShield] = React.useState(true);
     const [fingerprintCloak, setFingerprintCloak] = React.useState(true);
@@ -23,6 +41,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [deepSpoof, setDeepSpoof] = React.useState(true);
     const [retention, setRetention] = React.useState<PrivacySettings['dataRetention']>('forever');
     const [updateState, setUpdateState] = React.useState<UpdateState | null>(null);
+    const [sitePermissions, setSitePermissions] = React.useState<SitePermissionRow[]>([]);
+    const [siteZoomCount, setSiteZoomCount] = React.useState(0);
 
     React.useEffect(() => {
         const loadSettings = async (): Promise<void> => {
@@ -38,8 +58,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
             setDeepSpoof(settings.deepSpoof ?? true);
             setRetention(settings.dataRetention || 'forever');
         };
-        if (isOpen) void loadSettings();
+        const loadSiteData = async (): Promise<void> => {
+            try { setSitePermissions(await window.electronAPI?.getSitePermissions?.() || []); } catch { setSitePermissions([]); }
+            try {
+                const zooms = await window.electronAPI?.getSiteZooms?.() || {};
+                setSiteZoomCount(Object.keys(zooms).length);
+            } catch { setSiteZoomCount(0); }
+        };
+        if (isOpen) {
+            void loadSettings();
+            void loadSiteData();
+        }
     }, [isOpen]);
+
+    const forgetPermission = (key: string): void => {
+        void window.electronAPI?.clearSitePermissions?.(key);
+        setSitePermissions(prev => prev.filter(row => row.key !== key));
+    };
+
+    const resetZoomLevels = (): void => {
+        void window.electronAPI?.clearSiteZooms?.();
+        setSiteZoomCount(0);
+    };
 
     const updatePrivacy = (next: PrivacySettings): void => {
         void window.electronAPI?.updatePrivacySettings?.(next);
@@ -126,6 +166,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                     </section>
 
                     <section className="settings-section">
+                        <h3>Site permissions</h3>
+                        <p className="section-hint">Sites you allowed or blocked through the toolbar prompt. Forgetting a decision makes the site ask again.</p>
+                        {sitePermissions.length === 0 ? (
+                            <p className="section-empty">No saved site decisions yet.</p>
+                        ) : (
+                            <div className="permission-list">
+                                {sitePermissions.map(row => (
+                                    <div key={row.key} className={`permission-row ${row.decision}`}>
+                                        <Camera size={13} />
+                                        <span className="permission-origin" title={row.origin}>{row.origin.replace(/^https?:\/\//, '')}</span>
+                                        <span className="permission-what">{PERMISSION_LABELS[row.permission] || row.permission}</span>
+                                        <span className="permission-state">{row.decision === 'allow' ? 'Allowed' : 'Blocked'}</span>
+                                        <button onClick={() => forgetPermission(row.key)} title="Forget this decision"><Trash2 size={12} /></button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {sitePermissions.length > 0 && (
+                            <button className="secondary-button" onClick={() => { void window.electronAPI?.clearSitePermissions?.(); setSitePermissions([]); }}>
+                                <Trash2 size={14} /> Forget all site decisions
+                            </button>
+                        )}
+                    </section>
+
+                    <section className="settings-section">
                         <h3>Data</h3>
                         <label className="setting-row">
                             <span><History size={18} /> History retention</span>
@@ -136,6 +201,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                                 <option value="1d">24 hours</option>
                             </select>
                         </label>
+                        <button className="secondary-button" onClick={resetZoomLevels} disabled={siteZoomCount === 0}>
+                            <Eye size={14} /> Reset site zoom levels{siteZoomCount > 0 ? ` (${siteZoomCount} sites)` : ''}
+                        </button>
                         <button className="danger-button" onClick={() => {
                             if (confirm('Delete all Hoo Browser data? This cannot be undone.')) void window.electronAPI?.nuclearWipe?.();
                         }}>
