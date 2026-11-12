@@ -317,3 +317,12 @@
 
 .tab-action-btn.audio-btn { color: #ffb06a; }
 .tab-action-btn.audio-btn.muted { color: rgba(255, 255, 255, 0.45); }
+
+/* Drag-to-reorder feedback */
+.tab-item.dragging {
+    opacity: 0.45;
+}
+
+.tab-item.drag-over {
+    box-shadow: -2px 0 0 0 #ff6a00;
+}

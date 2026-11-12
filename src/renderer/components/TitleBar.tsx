@@ -11,7 +11,7 @@ const TitleBar: React.FC = () => {
 
     return (
         <div className="title-bar">
-            <div className="title-bar-drag">
+            <div className="title-bar-drag" onDoubleClick={handleMaximize} title="Double-click to maximize">
                 <img src={logo} alt="" className="logo-mini" style={{ width: 14, height: 14, marginRight: 8 }} />
                 <span className="title-bar-text">HOO BROWSER</span>
             </div>

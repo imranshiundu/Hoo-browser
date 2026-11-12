@@ -416,3 +416,12 @@
     white-space: nowrap;
     text-overflow: ellipsis;
 }
+
+/* Star fills in the accent color while the current page is bookmarked */
+.nav-btn.bookmarked {
+    color: #ff6a00;
+}
+
+.nav-btn.bookmarked:hover {
+    color: #ff8a30;
+}

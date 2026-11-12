@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     switchTab: (tabId: string) => ipcRenderer.invoke('switch-tab', tabId),
     closeTab: (tabId: string) => ipcRenderer.invoke('close-tab', tabId),
     renameTab: (tabId: string, title: string) => ipcRenderer.invoke('rename-tab', tabId, title),
+    reorderTabs: (orderedIds: string[]) => ipcRenderer.invoke('reorder-tabs', orderedIds),
     navigateTab: (tabId: string, url: string) => ipcRenderer.invoke('navigate-tab', tabId, url),
     setMosaicView: (tabId1: string, tabId2: string) => ipcRenderer.invoke('set-mosaic-view', tabId1, tabId2),
     clearMosaicView: () => ipcRenderer.invoke('clear-mosaic-view'),

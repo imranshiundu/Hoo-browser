@@ -5,7 +5,9 @@ import TitleBar from './components/TitleBar';
 import Home from './views/Home';
 import Browser from './views/Browser';
 import TabStrip from './components/TabStrip';
-import { Tab } from './types';
+import { Tab, TabType } from './types';
+import { reorderTabsByIds } from '../main/tab-utils';
+import { AlertTriangle, X } from 'lucide-react';
 
 const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
 const initialHomeTab = makeHomeTab();
@@ -33,6 +35,7 @@ const App: React.FC = () => {
     const [mutedMap, setMutedMap] = useState<Record<string, boolean>>({});
     const [navState, setNavState] = useState<Record<string, { canGoBack: boolean; canGoForward: boolean }>>({});
     const [zoomBadge, setZoomBadge] = useState<{ percent: number; at: number } | null>(null);
+    const [crashNotice, setCrashNotice] = useState<string | null>(null);
 
     const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || initialHomeTab;
 
@@ -56,7 +59,7 @@ const App: React.FC = () => {
     useEffect(() => {
         const loadInitialData = async (): Promise<void> => {
             if (!window.electronAPI?.getInitialData) return;
-            const data: { tabs: Tab[], activeTabId?: string | null } = await window.electronAPI.getInitialData();
+            const data: { tabs: Tab[], activeTabId?: string | null, crashedTabs?: Array<{ title?: string }> } = await window.electronAPI.getInitialData();
             const browserTabs = (data.tabs || []).filter(t => t.type === 'browser' && t.url !== 'about:blank');
             const restoredActive = data.activeTabId && browserTabs.some(t => t.id === data.activeTabId)
                 ? data.activeTabId
@@ -68,6 +71,21 @@ const App: React.FC = () => {
                 const home = makeHomeTab();
                 setTabs([home]);
                 setActiveTabId(home.id);
+            }
+            // Favicons persisted on the tab record keep tab identity across restarts.
+            const faviconSeeds: Record<string, string> = {};
+            browserTabs.forEach(tab => {
+                const favicon = (tab as Tab & { favicon?: string }).favicon;
+                if (favicon) faviconSeeds[tab.id] = favicon;
+            });
+            setFavicons(prev => ({ ...faviconSeeds, ...prev }));
+            // The renderer stores per-crash records but never surfaced them; tell
+            // the user Hoo recovered instead of failing silently.
+            const crashed = data.crashedTabs || [];
+            if (crashed.length) {
+                setCrashNotice(crashed.length === 1
+                    ? `Hoo recovered 1 tab that crashed last session: ${crashed[0].title || 'Untitled'}`
+                    : `Hoo recovered ${crashed.length} tabs that crashed last session.`);
             }
         };
         void loadInitialData();
@@ -201,6 +219,13 @@ const App: React.FC = () => {
 
     const togglePinTab = (tabId: string): void => {
         setPinnedTabIds(prev => prev.includes(tabId) ? prev.filter(id => id !== tabId) : [...prev, tabId]);
+    };
+
+    // Drag-to-reorder. The strip sends the full id order; unknown ids are
+    // filtered out and unmentioned tabs keep their relative order at the end.
+    const handleReorderTabs = (orderedIds: string[]): void => {
+        setTabs(prev => reorderTabsByIds(prev, orderedIds));
+        void window.electronAPI?.reorderTabs?.(orderedIds);
     };
 
     const handleToggleMute = (tabId: string): void => {
@@ -348,11 +373,23 @@ const App: React.FC = () => {
                 : [...prev.filter(t => t.type !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url: '' }]);
             setActiveTabId(tabId);
         });
-        window.electronAPI?.onSwitchToHome?.(() => {
+        window.electronAPI?.onSwitchToHome?.((tabId?: string) => {
+            setSplitTabId(null);
+            // The Home button converts the current tab in place (main already
+            // rewrote its storage record), so mirror that instead of spawning
+            // a duplicate "New Tab" while the old entry lingered in the strip.
+            if (tabId) {
+                setTabs(prev => prev.some(t => t.id === tabId)
+                    ? prev.map((t): Tab => t.id === tabId
+                        ? { ...t, type: 'home' as TabType, title: 'New Tab', url: undefined }
+                        : t)
+                    : [...prev.filter(t => t.type !== 'home'), { id: tabId, type: 'home' as TabType, title: 'New Tab' }]);
+                setActiveTabId(tabId);
+                return;
+            }
             const home = makeHomeTab();
             setTabs(prev => [...prev.filter(t => t.type !== 'home'), home]);
             setActiveTabId(home.id);
-            setSplitTabId(null);
         });
     }, []);
 
@@ -363,6 +400,13 @@ const App: React.FC = () => {
     return (
         <div className="app-shell">
             <TitleBar />
+            {crashNotice && (
+                <div className="crash-notice" role="status">
+                    <AlertTriangle size={15} />
+                    <span>{crashNotice}</span>
+                    <button onClick={() => setCrashNotice(null)} title="Dismiss" aria-label="Dismiss crash notice"><X size={14} /></button>
+                </div>
+            )}
             <main className="browser-shell">
                 <TabStrip
                     tabs={tabs}
@@ -378,6 +422,7 @@ const App: React.FC = () => {
                     onSplitTab={(id): void => { void handleSplitTab(id); }}
                     onCloseTab={(id): void => { void handleCloseTab(id); }}
                     onCreateTab={openHomeTab}
+                    onReorderTabs={handleReorderTabs}
                     onToggleMute={handleToggleMute}
                     onDuplicateTab={(id): void => { void duplicateTab(id); }}
                     onCloseOtherTabs={(id): void => { void closeOtherTabs(id); }}

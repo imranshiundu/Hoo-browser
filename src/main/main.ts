@@ -1,4 +1,4 @@
-import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard, dialog } from "electron";
+import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard, dialog, screen } from "electron";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
@@ -12,9 +12,40 @@ import { markWindowReady, trackNetworkRequest, trackNetworkBytes, getPerformance
 import { shouldBlockForLowData } from "./network-policy";
 import { setupDownloadManager, openDownloadFolder } from "./download-manager";
 import { setupBrowserContextMenu } from "./browser-context-menu";
-import { createTabIdFactory, stepZoomFactor, zoomPercent, crashReasonLabel } from "./tab-utils";
+import { createTabIdFactory, stepZoomFactor, zoomPercent, crashReasonLabel, reorderTabsByIds, clampWindowState } from "./tab-utils";
 
 app.setName("Hoo Browser");
+// One browser, one process. A second `hoo-browser` launch now focuses the
+// existing window (and opens any URL passed on the command line) instead of
+// starting a parallel browser with a second profile.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    app.quit();
+}
+
+function focusOrCreateWindow(urlToOpen?: string): void {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+        if (urlToOpen) void openUrlInNewTabInternal(urlToOpen);
+        return;
+    }
+    createWindow();
+    if (urlToOpen) {
+        mainWindow?.webContents.once('did-finish-load', (): void => {
+            void openUrlInNewTabInternal(urlToOpen);
+        });
+    }
+}
+
+function urlFromArgv(argv: string[]): string | undefined {
+    return argv.find(arg => /^https?:\/\//i.test(arg));
+}
+
+app.on('second-instance', (_event, argv): void => {
+    focusOrCreateWindow(urlFromArgv(argv));
+});
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-systemd-scope');
 app.commandLine.appendSwitch('no-sandbox');
@@ -277,9 +308,18 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
 
     // Real favicons captured from the page itself. Tabs used to depend on a
     // Google favicon service, which leaked every visited domain and failed offline.
+    // The URL is also persisted on the tab record so restarts keep tab identity.
     view.webContents.on('page-favicon-updated', (_event, favicons: string[]): void => {
         const icon = favicons && favicons.length ? favicons[favicons.length - 1] : '';
-        if (icon && !icon.startsWith('data:')) sendToShell('tab-favicon-updated', tabId, icon);
+        if (icon && !icon.startsWith('data:')) {
+            sendToShell('tab-favicon-updated', tabId, icon);
+            const data = StorageService.load();
+            const record = data.tabs.find(t => t.id === tabId);
+            if (record && record.favicon !== icon) {
+                record.favicon = icon;
+                StorageService.save({ tabs: data.tabs });
+            }
+        }
     });
 
     view.webContents.on('audio-state-changed', (event): void => {
@@ -342,6 +382,8 @@ function restoreTabs(): void {
 
     tabs.forEach((tab: any): void => {
         if (tab.type !== 'browser' || tab.id !== activeRestoreId || isHomeUrl(tab.url)) return;
+        // Skip tabs whose view already exists (macOS activate can call this again).
+        if (browserViews.has(tab.id)) return;
         const view = new BrowserView({
             webPreferences: {
                 nodeIntegration: false,
@@ -358,10 +400,49 @@ function restoreTabs(): void {
     });
 }
 
+// ---- Window state persistence -------------------------------------------
+// Browsers reopen at the size/position you left them. State is debounced so
+// live-dragging a window does not hammer the profile file.
+
+let windowStateSaveTimer: NodeJS.Timeout | null = null;
+
+function scheduleWindowStateSave(): void {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (windowStateSaveTimer) clearTimeout(windowStateSaveTimer);
+    windowStateSaveTimer = setTimeout((): void => {
+        windowStateSaveTimer = null;
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        const fullscreen = mainWindow.isFullScreen();
+        const bounds = fullscreen ? mainWindow.getNormalBounds() : mainWindow.getBounds();
+        StorageService.save({
+            windowState: {
+                bounds,
+                maximized: mainWindow.isMaximized(),
+                fullscreen
+            }
+        });
+    }, 350);
+}
+
+function restoreWindowStateOptions(): Electron.BrowserWindowConstructorOptions {
+    const saved = clampWindowState(StorageService.load().windowState, screen.getAllDisplays());
+    const bounds = saved.bounds || {};
+    return {
+        width: bounds.width || 1400,
+        height: bounds.height || 800,
+        x: bounds.x,
+        y: bounds.y
+    };
+}
+
 function createWindow(): void {
+    if (!gotSingleInstanceLock) return;
+    const restored = restoreWindowStateOptions();
     mainWindow = new BrowserWindow({
-        height: 800,
-        width: 1400,
+        height: restored.height,
+        width: restored.width,
+        x: restored.x,
+        y: restored.y,
         frame: false,
         title: "Hoo Browser",
         icon: resolveAssetPath('assets/branding/hoo-app-icon.png'),
@@ -377,6 +458,8 @@ function createWindow(): void {
         },
     });
     mainWindow.setMaxListeners(40);
+    if (StorageService.load().windowState?.maximized) mainWindow.maximize();
+    if (StorageService.load().windowState?.fullscreen) mainWindow.setFullScreen(true);
 
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
     mainWindow.once('ready-to-show', markWindowReady);
@@ -397,11 +480,15 @@ function createWindow(): void {
     });
 
     const triggerResize = (): void => {
+        scheduleWindowStateSave();
         if (activeTabId) updateBrowserViewBounds();
     };
     mainWindow.on('resize', triggerResize);
     mainWindow.on('maximize', triggerResize);
     mainWindow.on('unmaximize', triggerResize);
+    mainWindow.on('enter-full-screen', scheduleWindowStateSave);
+    mainWindow.on('leave-full-screen', scheduleWindowStateSave);
+    mainWindow.on('close', scheduleWindowStateSave);
 }
 
 ipcMain.handle('hide-browser-view', async (): Promise<void> => {
@@ -802,6 +889,12 @@ ipcMain.handle('stop-loading', async (_event, tabId: string): Promise<void> => {
     if (view && !view.webContents.isDestroyed()) view.webContents.stop();
 });
 
+ipcMain.handle('reorder-tabs', async (_event, orderedIds: string[]): Promise<void> => {
+    const data = StorageService.load();
+    data.tabs = reorderTabsByIds(data.tabs, Array.isArray(orderedIds) ? orderedIds : []);
+    StorageService.save({ tabs: data.tabs });
+});
+
 ipcMain.handle('rename-tab', async (_event, tabId: string, title: string): Promise<void> => {
     const data = StorageService.load();
     const tab = data.tabs.find(t => t.id === tabId);
@@ -1047,5 +1140,13 @@ function setupAppMenu(): void {
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then((): void => {
+    if (!gotSingleInstanceLock) return; // another Hoo instance owns the profile
+    createWindow();
+});
+// macOS keeps the app alive with the window closed; the dock click must
+// reopen a window instead of leaving a zombie process.
+app.on('activate', (): void => {
+    if (mainWindow === null && gotSingleInstanceLock) createWindow();
+});
 app.on("window-all-closed", (): void => { if (process.platform !== "darwin") app.quit(); });

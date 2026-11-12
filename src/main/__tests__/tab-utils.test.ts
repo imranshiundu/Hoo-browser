@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+    clampWindowState,
     clampZoomFactor,
     crashReasonLabel,
     createTabIdFactory,
     findStatusText,
     formatBytes,
+    reorderTabsByIds,
     stepZoomFactor,
     zoomPercent
 } from '../tab-utils';
@@ -89,5 +91,81 @@ describe('formatBytes', () => {
         expect(formatBytes(2048)).toBe('2.0 KB');
         expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB');
         expect(formatBytes(3.5 * 1024 ** 3)).toBe('3.5 GB');
+    });
+});
+
+describe('reorderTabsByIds', () => {
+    const tabs = [
+        { id: 'a', title: 'A' },
+        { id: 'b', title: 'B' },
+        { id: 'c', title: 'C' }
+    ];
+
+    it('reorders records to match the drag order', () => {
+        expect(reorderTabsByIds(tabs, ['c', 'a', 'b']).map(t => t.id)).toEqual(['c', 'a', 'b']);
+    });
+
+    it('keeps the original records (identity), not copies', () => {
+        const ordered = reorderTabsByIds(tabs, ['b', 'a', 'c']);
+        expect(ordered[0]).toBe(tabs[1]);
+    });
+
+    it('ignores unknown and duplicate ids', () => {
+        expect(reorderTabsByIds(tabs, ['c', 'zzz', 'c', 'a']).map(t => t.id)).toEqual(['c', 'a', 'b']);
+    });
+
+    it('appends tabs the renderer never mentioned', () => {
+        expect(reorderTabsByIds(tabs, ['b']).map(t => t.id)).toEqual(['b', 'a', 'c']);
+    });
+
+    it('returns the input untouched for empty or invalid input', () => {
+        expect(reorderTabsByIds(tabs, [])).toBe(tabs);
+        expect(reorderTabsByIds(tabs, undefined as unknown as string[])).toBe(tabs);
+    });
+});
+
+describe('clampWindowState', () => {
+    const displays = [{ workArea: { x: 0, y: 0, width: 1920, height: 1040 } }];
+
+    it('falls back to a sane default window when nothing was saved', () => {
+        const restored = clampWindowState(undefined, displays);
+        expect(restored.bounds?.width).toBe(1400);
+        expect(restored.bounds?.height).toBe(800);
+        expect(restored.bounds?.x).toBeUndefined();
+    });
+
+    it('restores a saved size inside the work area', () => {
+        const restored = clampWindowState(
+            { bounds: { x: 40, y: 30, width: 1200, height: 720 } },
+            displays
+        );
+        expect(restored.bounds).toEqual({ x: 40, y: 30, width: 1200, height: 720 });
+    });
+
+    it('shrinks windows larger than the screen and grows tiny ones', () => {
+        const restored = clampWindowState(
+            { bounds: { x: 0, y: 0, width: 4000, height: 300 } },
+            displays
+        );
+        expect(restored.bounds?.width).toBe(1920);
+        expect(restored.bounds?.height).toBe(600);
+    });
+
+    it('keeps an off-screen window reachable on the nearest edge', () => {
+        const restored = clampWindowState(
+            { bounds: { x: 18000, y: -900, width: 1200, height: 720 } },
+            displays
+        );
+        expect(restored.bounds?.x).toBe(1920 - 80);
+        expect(restored.bounds?.y).toBe(0);
+    });
+
+    it('remembers maximized and fullscreen flags', () => {
+        const restored = clampWindowState(
+            { bounds: { x: 0, y: 0, width: 1200, height: 720 }, maximized: true, fullscreen: true },
+            displays
+        );
+        expect(restored.maximized).toBe(true);
+        expect(restored.fullscreen).toBe(true);
     });
 });

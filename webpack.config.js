@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -82,6 +83,18 @@ module.exports = [
             new HtmlWebpackPlugin({
                 template: './src/renderer/index.html',
                 filename: 'index.html',
+            }),
+            // Branding must exist at stable (non-hashed) paths: the main process
+            // resolves the window/package icon from dist/renderer/assets/branding.
+            // Packaged builds previously lost the icon entirely because nothing
+            // copied this tree into dist.
+            new CopyWebpackPlugin({
+                patterns: [
+                    {
+                        from: 'src/renderer/assets/branding',
+                        to: 'assets/branding'
+                    }
+                ]
             }),
         ],
     },

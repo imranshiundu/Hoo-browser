@@ -17,6 +17,7 @@ interface TabStripProps {
     onSplitTab: (id: string) => void;
     onCloseTab: (id: string) => void;
     onCreateTab: () => void;
+    onReorderTabs?: (orderedIds: string[]) => void;
     onToggleMute?: (id: string) => void;
     onDuplicateTab?: (id: string) => void;
     onCloseOtherTabs?: (id: string) => void;
@@ -50,6 +51,7 @@ const TabStrip: React.FC<TabStripProps> = ({
     onSplitTab,
     onCloseTab,
     onCreateTab,
+    onReorderTabs,
     onToggleMute,
     onDuplicateTab,
     onCloseOtherTabs,
@@ -63,6 +65,9 @@ const TabStrip: React.FC<TabStripProps> = ({
     const [editValue, setEditValue] = React.useState('');
     const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; tabId: string } | null>(null);
     const [newTabMenu, setNewTabMenu] = React.useState<{ x: number; y: number } | null>(null);
+    // Drag-to-reorder: the tab being dragged and the tab currently hovered over.
+    const [dragTabId, setDragTabId] = React.useState<string | null>(null);
+    const [dragOverId, setDragOverId] = React.useState<string | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTabRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -117,6 +122,33 @@ const TabStrip: React.FC<TabStripProps> = ({
         if (aPinned === bPinned) return 0;
         return aPinned ? -1 : 1;
     });
+
+    // Drop the dragged tab at the target's position. Pinned tabs are re-partitioned
+    // to the front afterwards — browsers keep pinned tabs locked to the left edge.
+    const handleDropOn = (targetId: string): void => {
+        setDragOverId(null);
+        if (!dragTabId || dragTabId === targetId) {
+            setDragTabId(null);
+            return;
+        }
+        const ids = tabs.map(tab => tab.id);
+        const from = ids.indexOf(dragTabId);
+        const to = ids.indexOf(targetId);
+        if (from < 0 || to < 0) {
+            setDragTabId(null);
+            return;
+        }
+        ids.splice(to, 0, ...ids.splice(from, 1));
+        const pinned = new Set(pinnedTabIds);
+        const nextIds = [...ids.filter(id => pinned.has(id)), ...ids.filter(id => !pinned.has(id))];
+        setDragTabId(null);
+        onReorderTabs?.(nextIds);
+    };
+
+    const endDrag = (): void => {
+        setDragTabId(null);
+        setDragOverId(null);
+    };
 
     const executeTabAction = (action: string | null, tab: Tab) => {
         if (!action) return;
@@ -246,10 +278,25 @@ const TabStrip: React.FC<TabStripProps> = ({
                         <div
                             key={tab.id}
                             ref={isActive ? activeTabRef : undefined}
-                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''} ${loadingIds[tab.id] ? 'loading' : ''}`}
+                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''} ${loadingIds[tab.id] ? 'loading' : ''} ${dragTabId === tab.id ? 'dragging' : ''} ${dragOverId === tab.id && dragTabId && dragTabId !== tab.id ? 'drag-over' : ''}`}
                             onClick={() => onSwitchTab(tab.id)}
                             onDoubleClick={(e) => startEditing(e, tab)}
                             onContextMenu={(e) => void openContextMenu(e, tab.id)}
+                            draggable={!editingId}
+                            onDragStart={(e) => {
+                                setDragTabId(tab.id);
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', tab.url || tab.title);
+                            }}
+                            onDragOver={(e) => {
+                                if (!dragTabId || dragTabId === tab.id) return;
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                setDragOverId(tab.id);
+                            }}
+                            onDragLeave={() => setDragOverId(prev => (prev === tab.id ? null : prev))}
+                            onDrop={(e) => { e.preventDefault(); handleDropOn(tab.id); }}
+                            onDragEnd={endDrag}
                             onMouseDown={(e) => {
                                 if (e.button === 1 && canClose) {
                                     e.preventDefault();

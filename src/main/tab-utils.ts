@@ -75,3 +75,74 @@ export function formatBytes(bytes: number): string {
     const text = unit === 0 ? String(Math.round(value)) : value.toFixed(1);
     return `${text} ${units[unit]}`;
 }
+
+/**
+ * Reorder tab records to match the renderer's drag-and-drop order.
+ * Unknown/duplicate ids are ignored; known ids keep their records, and any
+ * tabs the renderer did not mention are appended so nothing is lost.
+ */
+export function reorderTabsByIds<T extends { id: string }>(tabs: T[], orderedIds: string[]): T[] {
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) return tabs;
+    const byId = new Map(tabs.map(tab => [tab.id, tab]));
+    const ordered: T[] = [];
+    const seen = new Set<string>();
+    for (const id of orderedIds) {
+        if (seen.has(id)) continue;
+        const tab = byId.get(id);
+        if (!tab) continue;
+        seen.add(id);
+        ordered.push(tab);
+    }
+    for (const tab of tabs) {
+        if (!seen.has(tab.id)) ordered.push(tab);
+    }
+    return ordered;
+}
+
+export interface WindowBounds { x: number; y: number; width: number; height: number; }
+
+export interface WindowPersistState {
+    bounds?: Partial<WindowBounds>;
+    maximized?: boolean;
+    fullscreen?: boolean;
+}
+
+export interface DisplayWorkArea { workArea: WindowBounds; }
+
+const WINDOW_MIN_WIDTH = 940;
+const WINDOW_MIN_HEIGHT = 600;
+
+/**
+ * Make a persisted window state safe to restore: sizes stay within sane
+ * minimums and fit the largest connected display's work area, and the window
+ * keeps a visible strip of its title bar after monitor changes (dock/undock,
+ * monitor unplug, resolution change between sessions).
+ */
+export function clampWindowState(state: WindowPersistState | undefined | null, displays: DisplayWorkArea[]): WindowPersistState {
+    if (!state || !Array.isArray(displays) || displays.length === 0) {
+        return { bounds: { x: undefined, y: undefined, width: 1400, height: 800 } };
+    }
+    const largest = displays.reduce((best, item) => {
+        const area = item.workArea.width * item.workArea.height;
+        const bestArea = best.workArea.width * best.workArea.height;
+        return area > bestArea ? item : best;
+    });
+    const work = largest.workArea;
+    const raw = state.bounds || {};
+    const width = Math.min(work.width, Math.max(WINDOW_MIN_WIDTH, Math.floor(Number(raw.width) || 1400)));
+    const height = Math.min(work.height, Math.max(WINDOW_MIN_HEIGHT, Math.floor(Number(raw.height) || 800)));
+    const x = Number.isFinite(Number(raw.x)) ? Math.floor(Number(raw.x)) : undefined;
+    const y = Number.isFinite(Number(raw.y)) ? Math.floor(Number(raw.y)) : undefined;
+    return {
+        bounds: {
+            width,
+            height,
+            // Keep an 80px visible strip so a stale position can never strand
+            // the window entirely off-screen.
+            x: x === undefined ? undefined : Math.min(Math.max(x, work.x - width + 80), work.x + work.width - 80),
+            y: y === undefined ? undefined : Math.min(Math.max(y, work.y), work.y + work.height - 80)
+        },
+        maximized: !!state.maximized,
+        fullscreen: !!state.fullscreen
+    };
+}

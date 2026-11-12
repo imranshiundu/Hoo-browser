@@ -94,7 +94,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         }
     };
 
-    useEffect(() => loadBookmarks(), []);
+    useEffect(() => loadBookmarks(), [url]);
 
     const refreshDownloads = async (): Promise<void> => {
         if (!window.electronAPI?.getDownloads) return;
@@ -180,6 +180,14 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
 
     const bookmarkCurrent = (): void => {
         if (!url || url === 'about:blank') return;
+        // Real browsers toggle: the star fills when the page is saved and
+        // clicking again removes it.
+        if (isBookmarked) {
+            const next = bookmarks.filter(item => item.url !== url);
+            localStorage.setItem(BOOKMARK_KEY, JSON.stringify(next));
+            setBookmarks(next);
+            return;
+        }
         let title = url;
         try {
             title = new URL(url).hostname.replace(/^www\./, '');
@@ -208,6 +216,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const splitCandidates = tabs.filter(tab => tab.id !== tabId && tab.type === 'browser');
     const isSecure = url.startsWith('https://');
     const isExternal = /^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(url || inputValue);
+    const isBookmarked = !!url && bookmarks.some(item => item.url === url);
 
     const handleOpenDownload = (entry: DownloadEntry): void => {
         void window.electronAPI?.openDownload?.(entry.id);
@@ -291,7 +300,14 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                         </div>
                     )}
                 </div>
-                <button className="nav-btn" onClick={bookmarkCurrent} title="Bookmark page"><Star size={16} /></button>
+                <button
+                    className={`nav-btn ${isBookmarked ? 'bookmarked' : ''}`}
+                    onClick={bookmarkCurrent}
+                    title={isBookmarked ? 'Remove bookmark' : 'Bookmark page'}
+                    disabled={!url || url === 'about:blank'}
+                >
+                    <Star size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
+                </button>
                 <div className="nav-menu-wrap">
                     <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); setToolsOpen(false); setSplitOpen(false); setDownloadsOpen(false); setHistoryOpen(false); }} title="Bookmarks"><BookOpen size={16} /></button>
                     {bookmarksOpen && (

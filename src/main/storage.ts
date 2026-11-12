@@ -37,6 +37,8 @@ export interface BrowserTabRecord {
     lifecycle?: BrowserTabLifecycle;
     lastActiveAt?: number;
     restoredLazy?: boolean;
+    /** Last known favicon URL, kept so tabs keep their identity across restarts. */
+    favicon?: string;
 }
 
 export interface StorageData {
@@ -49,6 +51,12 @@ export interface StorageData {
         [key: string]: any;
     };
     activeTabId: string | null;
+    /** Restored window size/position so restarts feel like the same browser. */
+    windowState?: {
+        bounds?: { x?: number; y?: number; width?: number; height?: number };
+        maximized?: boolean;
+        fullscreen?: boolean;
+    };
     lastUpdated: number;
 }
 

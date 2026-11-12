@@ -86,6 +86,7 @@ declare global {
         switchTab: (tabId: string) => Promise<string>;
         closeTab: (tabId: string) => Promise<void>;
         renameTab: (tabId: string, title: string) => Promise<void>;
+        reorderTabs: (orderedIds: string[]) => Promise<void>;
         showTabMenu: (payload: any) => Promise<string | null>;
         showNewTabMenu: (payload: any) => Promise<string | null>;
         findInPage: (tabId: string, query: string, options?: { forward?: boolean; findNext?: boolean }) => Promise<void>;

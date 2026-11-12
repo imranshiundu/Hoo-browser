@@ -55,21 +55,28 @@ apps never touch:
 
 ## Current status
 
-Version: `v0.3 Real Browser Behavior`
+Version: `v0.4 Feels Like A Browser`
 
 The current codebase includes working early versions of:
 
 - Chromium rendering through Electron `BrowserView`
 - tabs with persisted basic state and a documented lifecycle
+- **drag-to-reorder tabs** (pinned tabs stay locked to the left edge, order survives restarts)
 - navigation controls and DuckDuckGo-first home search
+- **single-instance lock**: launching Hoo again focuses the existing window and opens any URL passed on the command line
+- **window state persistence**: restarts reopen at your size/position/maximized state (clamped to the nearest display so a stale position can never strand the window)
+- **a real icon set** (PNG/ICO/ICNS generated from the SVG master) — the taskbar, dock, and packages show the owl, not the default Electron icon
 - an application menu whose accelerators work **inside web pages**: Ctrl+T/W/N new & close tabs, Ctrl+Tab and Ctrl+1–9 to switch, Ctrl+R / Ctrl+Shift+R reload, Alt+←/→ back/forward, Ctrl+F find, Ctrl+J downloads, Ctrl+0/+=/- zoom, F12 devtools, Ctrl+P print
 - find in page with live match counts ("3 of 17")
-- real favicons captured from pages (no third-party favicon service), with privacy-preserving letter avatars as fallback
+- real favicons captured from pages (no third-party favicon service), with privacy-preserving letter avatars as fallback — **and favicon URLs persisted on the tab record so restarts keep tab identity**
+- **a bookmark star that toggles**: filled while the current page is saved, click again to remove
 - downloads: tracked, live progress in the toolbar, open file / show in folder, executable danger hints
 - right-click context menu inside web pages (copy, search selection, open link, save image)
 - loading feedback: tab spinners, an indeterminate progress bar, a working stop button, and back/forward buttons that disable themselves
 - audio tab indicators with click-to-mute, link-hover URL preview, window title that follows the page
-- crash handling: a crashed renderer shows a recoverable error page instead of a silent blank rectangle
+- crash handling: a crashed renderer shows a recoverable error page instead of a silent blank rectangle, **plus a session-recovery notice on the next launch**
+- **double-click the title bar to maximize** (desktop convention)
+- **macOS dock click reopens a window** instead of leaving a zombie process
 - isolated web-app profiles (persistent partitions per app)
 - privacy toggles, bookmarks, RSS reader
 - simple ad/tracker host blocking with compatibility allowlist
@@ -79,7 +86,7 @@ The current codebase includes working early versions of:
 - Linux install/update scripts and cross-platform packaging metadata
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — the `v0.3 Stable Tabs` milestone (navigation state, find, downloads, crash handling, app-wide shortcuts) has shipped; the next milestone is `v0.4 Web Apps`.
+The important work now is to make the project stable, testable, installable, and honest — the `v0.3 Stable Tabs` milestone (navigation state, find, downloads, crash handling, app-wide shortcuts) has shipped, and `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle) has shipped on top of it. The next milestone is `v0.5 Web Apps` / permissions UX.
 
 ## Test suite
 
@@ -104,8 +111,9 @@ Covered modules today:
 | `network-policy.ts` | low-data/lite/extreme/compatibility mode behavior for fonts, media, beacons, prefetch and tracker hosts |
 | `storage.ts` | profile normalization, corrupt-tab filtering, active-tab validation, atomic save/load round-trips |
 | `download-manager.ts` | filename sanitization and executable danger hints |
-| `tab-utils.ts` | collision-free tab ids, zoom clamping/stepping, find-bar status text, crash reason labels, byte formatting |
+| `tab-utils.ts` | collision-free tab ids, zoom clamping/stepping, find-bar status text, crash reason labels, byte formatting, drag-reorder id mapping, window-state clamping |
 | `types.ts` (renderer) | privacy-preserving site-initial avatars used instead of third-party favicon services |
+| `branding assets` | the generated PNG/ICO/ICNS icon set exists so builds can never silently lose the app icon again |
 
 ## Install on Linux
 
@@ -191,13 +199,15 @@ These are tracked honestly instead of hidden:
 1. The ad/tracker blocker uses a curated static list, not maintained filter lists.
 2. Random user-agent rotation can make fingerprinting worse if used incorrectly.
 3. Permission prompts for camera, microphone, notifications, location, and clipboard need a visible Hoo-controlled UX.
-4. ~~Crash recovery needs further implementation~~ Crashed tabs now show a recoverable error page and are recorded; a one-click "restore all crashed tabs" UX is still missing.
+4. ~~Crash recovery needs further implementation~~ Crashed tabs now show a recoverable error page, are recorded, and a session-recovery notice appears on the next launch; a one-click "restore all crashed tabs" UX is still missing.
 5. ~~The project has no automated tests yet.~~ Main-process logic and key renderer helpers are unit-tested; full component tests are still missing.
 6. RSS currently depends on renderer-side fetching patterns that should move to the main process.
 7. Cloud sync needs stronger conflict handling and clearer data boundaries.
 8. IPC actions need tighter validation as the browser grows.
 9. AppImage/deb builds need clean-machine verification.
 10. Zoom level is remembered per tab in memory only; per-site zoom persistence is not implemented yet.
+11. Bookmark folders, search inside history, and bookmarks import/export are not implemented yet.
+12. Tab drag-reorder is HTML5-based; dragging a tab out of the strip to tear it into a new window is not supported yet.
 
 ## Keyboard map
 
@@ -224,12 +234,13 @@ web page has focus — not only while the Hoo UI is focused:
 
 - `v0.1 Foundation` — honest docs, build scripts, verification, project contract
 - `v0.2 Hoo Foundation` — Hoo identity, installer path, branded home UI, packaging metadata, **test suite + CI**
-- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling, app-wide shortcuts, find/downloads/favicons wiring ← *current*
-- `v0.4 Web Apps` — isolated app profiles, permissions, reset controls
-- `v0.5 Privacy Controls` — maintained filters, allowlists, visible blocked counts, stable fingerprint profile
-- `v0.6 Local Assistant` — streaming, explicit context, provider settings, local/cloud warnings
-- `v0.7 Sync and Encryption` — safe sync scope, conflict handling, encrypted backup/import/export
-- `v0.8 Packaging` — verified AppImage, deb, icons, desktop entry
+- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling, app-wide shortcuts, find/downloads/favicons wiring
+- `v0.4 Feels Like A Browser` — drag-to-reorder tabs, single-instance lock, window state restore, real icon set, bookmark toggle, session-recovery notice ← *current*
+- `v0.5 Web Apps` — isolated app profiles, permissions, reset controls
+- `v0.6 Privacy Controls` — maintained filters, allowlists, visible blocked counts, stable fingerprint profile
+- `v0.7 Local Assistant` — streaming, explicit context, provider settings, local/cloud warnings
+- `v0.8 Sync and Encryption` — safe sync scope, conflict handling, encrypted backup/import/export
+- `v0.9 Packaging` — verified AppImage, deb, icons, desktop entry
 - `v1.0 Daily Driver` — only after stability, packaging, tests, and privacy docs match behavior
 
 Read the detailed plan in [`docs/rebuild-plan.md`](docs/rebuild-plan.md).
