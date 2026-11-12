@@ -87,9 +87,10 @@ The current codebase includes working early versions of:
 - HTTPS upgrade for HTTP URLs, optional user-agent control
 - local storage through Electron `safeStorage` where available
 - Linux install/update scripts and cross-platform packaging metadata
+- **automatic updates**: packaged installs (AppImage, deb, NSIS, DMG) check GitHub Releases at startup, download new versions in the background, and offer one-click "Restart to update" — with live progress in Settings. Source checkouts keep the git-based updater (pull, selective install, selective rebuild); copies that cannot self-update say so honestly and link to the releases page
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), and `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear) have shipped. The next milestone is `v0.6 Web Apps` / permissions UX polish.
+The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), and `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service) have shipped. The next milestone is `v0.7 Web Apps` / permissions UX polish.
 
 ## Test suite
 
@@ -118,6 +119,7 @@ Covered modules today:
 | `permissions.ts` | per-origin permission decisions, decision sanitization, DeepSpoof exemption precedence (stored blocks win) |
 | `zoom-store.ts` | per-site zoom clamping and origin-keyed persistence sanitization |
 | `bookmarks-io.ts` | Netscape HTML bookmark serialization/parsing, entity escaping, folder round-trips, dedupe-merging with caps |
+| `update-service.ts` | update-channel resolution (packaged vs source vs none), startup auto-check gating, download progress formatting, updater error translation |
 | `types.ts` (renderer) | privacy-preserving site-initial avatars used instead of third-party favicon services |
 | `branding assets` | the generated PNG/ICO/ICNS icon set exists so builds can never silently lose the app icon again |
 

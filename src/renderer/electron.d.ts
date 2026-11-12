@@ -15,9 +15,19 @@ declare global {
 
     interface HooUpdateResult {
         ok: boolean;
-        status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed';
+        status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed' | 'restart-required' | 'downloading';
         message: string;
         details?: string;
+        channel: 'electron-updater' | 'git-source' | 'none';
+        version?: string;
+    }
+
+    interface AppUpdateStatus {
+        phase: 'idle' | 'checking' | 'downloading' | 'downloaded' | 'current' | 'error';
+        message: string;
+        channel: 'electron-updater' | 'git-source' | 'none';
+        version?: string;
+        percent?: number;
     }
 
     interface HooPerformanceSnapshot {
@@ -136,6 +146,9 @@ declare global {
         getSystemMetrics: () => Promise<HooPerformanceSnapshot>;
         getPerformanceSnapshot: () => Promise<HooPerformanceSnapshot>;
         checkForUpdates: () => Promise<HooUpdateResult>;
+        installAppUpdate: () => Promise<{ ok: boolean; message: string }>;
+        getUpdateChannel: () => Promise<{ channel: 'electron-updater' | 'git-source' | 'none'; isPackaged: boolean }>;
+        onAppUpdateStatus: (callback: (status: AppUpdateStatus) => void) => void;
         nuclearWipe: () => Promise<void>;
         toggleSidebar: (collapsed: boolean) => Promise<void>;
         hideBrowserView: () => Promise<void>;

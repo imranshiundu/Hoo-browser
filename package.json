@@ -1,113 +1,119 @@
 {
-  "name": "hoo-browser",
-  "version": "0.5.0",
-  "productName": "Hoo Browser",
-  "description": "Owl-guided, DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and Linux-first freedom.",
-  "main": "dist/main/main.js",
-  "scripts": {
-    "prebuild": "node scripts/ensure-safe-browser-ui.cjs",
-    "build": "webpack --config webpack.config.js",
-    "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
-    "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
-    "start": "electron . --no-sandbox",
-    "start:sandbox": "electron .",
-    "start:auth-trace": "node scripts/run-auth-trace.cjs",
-    "dev:start": "npm run build && npm run start",
-    "hotfix:stability": "node scripts/apply-hoo-stability-hotfix.cjs",
-    "hotfix:google-auth": "node scripts/apply-google-auth-external-mode.cjs",
-    "verify:hoo": "node scripts/verify-hoo-local.cjs",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "verify": "npm run verify:hoo && npm run typecheck && npm test && npm run build",
-    "dist": "npm run build:prod && electron-builder --linux AppImage deb",
-    "dist:linux": "npm run build:prod && electron-builder --linux AppImage deb",
-    "dist:appimage": "npm run build:prod && electron-builder --linux AppImage",
-    "dist:deb": "npm run build:prod && electron-builder --linux deb",
-    "dist:win": "npm run build:prod && electron-builder --win nsis portable",
-    "dist:mac": "npm run build:prod && electron-builder --mac dmg zip"
-  },
-  "keywords": [
-    "electron",
-    "browser",
-    "privacy",
-    "duckduckgo",
-    "linux",
-    "windows",
-    "macos",
-    "desktop-app",
-    "hoo"
-  ],
-  "author": "Imran Shiundu",
-  "license": "MIT",
-  "build": {
-    "appId": "com.imranshiundu.hoo-browser",
+    "name": "hoo-browser",
+    "version": "0.6.0",
     "productName": "Hoo Browser",
-    "artifactName": "Hoo-Browser-${version}.${ext}",
-    "directories": {
-      "output": "release"
+    "description": "Owl-guided, DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and Linux-first freedom.",
+    "main": "dist/main/main.js",
+    "scripts": {
+        "prebuild": "node scripts/ensure-safe-browser-ui.cjs",
+        "build": "webpack --config webpack.config.js",
+        "build:prod": "cross-env NODE_ENV=production webpack --config webpack.config.js",
+        "dev": "cross-env NODE_ENV=development webpack --config webpack.config.js --watch",
+        "start": "electron . --no-sandbox",
+        "start:sandbox": "electron .",
+        "start:auth-trace": "node scripts/run-auth-trace.cjs",
+        "dev:start": "npm run build && npm run start",
+        "hotfix:stability": "node scripts/apply-hoo-stability-hotfix.cjs",
+        "hotfix:google-auth": "node scripts/apply-google-auth-external-mode.cjs",
+        "verify:hoo": "node scripts/verify-hoo-local.cjs",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "verify": "npm run verify:hoo && npm run typecheck && npm test && npm run build",
+        "dist": "npm run build:prod && electron-builder --linux AppImage deb",
+        "dist:linux": "npm run build:prod && electron-builder --linux AppImage deb",
+        "dist:appimage": "npm run build:prod && electron-builder --linux AppImage",
+        "dist:deb": "npm run build:prod && electron-builder --linux deb",
+        "dist:win": "npm run build:prod && electron-builder --win nsis portable",
+        "dist:mac": "npm run build:prod && electron-builder --mac dmg zip"
     },
-    "files": [
-      "dist/**/*",
-      "package.json"
+    "keywords": [
+        "electron",
+        "browser",
+        "privacy",
+        "duckduckgo",
+        "linux",
+        "windows",
+        "macos",
+        "desktop-app",
+        "hoo"
     ],
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Network",
-      "icon": "src/renderer/assets/branding/icons/",
-      "synopsis": "Owl-guided privacy-first desktop browser",
-      "description": "Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and a calm owl-guided browsing experience."
+    "author": "Imran Shiundu",
+    "license": "MIT",
+    "build": {
+        "appId": "com.imranshiundu.hoo-browser",
+        "productName": "Hoo Browser",
+        "artifactName": "Hoo-Browser-${version}.${ext}",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "package.json"
+        ],
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "category": "Network",
+            "icon": "src/renderer/assets/branding/icons/",
+            "synopsis": "Owl-guided privacy-first desktop browser",
+            "description": "Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and a calm owl-guided browsing experience."
+        },
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "icon": "src/renderer/assets/branding/hoo-app-icon.ico",
+            "publisherName": "Imran Shiundu"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "Hoo Browser"
+        },
+        "mac": {
+            "target": [
+                "dmg",
+                "zip"
+            ],
+            "icon": "src/renderer/assets/branding/hoo-app-icon.icns",
+            "category": "public.app-category.productivity"
+        },
+        "publish": {
+            "provider": "github",
+            "owner": "imranshiundu",
+            "repo": "Hoo-browser"
+        }
     },
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "icon": "src/renderer/assets/branding/hoo-app-icon.ico",
-      "publisherName": "Imran Shiundu"
+    "devDependencies": {
+        "@types/node": "^25.2.0",
+        "@types/react": "^19.2.10",
+        "@types/react-dom": "^19.2.3",
+        "copy-webpack-plugin": "^13.0.1",
+        "cross-env": "^10.1.0",
+        "electron": "^40.1.0",
+        "electron-builder": "^26.7.0",
+        "html-webpack-plugin": "^5.6.6",
+        "ts-loader": "^9.5.4",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.3",
+        "vitest": "^3.2.4",
+        "webpack": "^5.104.1",
+        "webpack-cli": "^6.0.1"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Hoo Browser"
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "src/renderer/assets/branding/hoo-app-icon.icns",
-      "category": "public.app-category.productivity"
+    "dependencies": {
+        "clsx": "^2.1.1",
+        "css-loader": "^7.1.3",
+        "electron-updater": "^6.8.11",
+        "lucide-react": "^0.563.0",
+        "megajs": "^1.3.9",
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+        "style-loader": "^4.0.0"
     }
-  },
-  "devDependencies": {
-    "@types/node": "^25.2.0",
-    "@types/react": "^19.2.10",
-    "@types/react-dom": "^19.2.3",
-    "copy-webpack-plugin": "^13.0.1",
-    "cross-env": "^10.1.0",
-    "electron": "^40.1.0",
-    "electron-builder": "^26.7.0",
-    "html-webpack-plugin": "^5.6.6",
-    "ts-loader": "^9.5.4",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4",
-    "webpack": "^5.104.1",
-    "webpack-cli": "^6.0.1"
-  },
-  "dependencies": {
-    "clsx": "^2.1.1",
-    "css-loader": "^7.1.3",
-    "lucide-react": "^0.563.0",
-    "megajs": "^1.3.9",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "style-loader": "^4.0.0"
-  }
 }

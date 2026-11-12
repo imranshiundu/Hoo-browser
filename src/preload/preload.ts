@@ -45,6 +45,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getPerformanceSnapshot: () => ipcRenderer.invoke('get-performance-snapshot'),
     nuclearWipe: () => ipcRenderer.invoke('nuclear-wipe'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    installAppUpdate: () => ipcRenderer.invoke('install-app-update'),
+    getUpdateChannel: () => ipcRenderer.invoke('get-update-channel'),
+    onAppUpdateStatus: (callback: (status: any) => void) => {
+        ipcRenderer.on('app-update-status', (_event, status) => callback(status));
+    },
     toggleSidebar: (collapsed: boolean) => ipcRenderer.invoke('toggle-sidebar', collapsed),
     hideBrowserView: () => ipcRenderer.invoke('hide-browser-view'),
     updateViewBounds: (bounds: any) => ipcRenderer.invoke('update-view-bounds', bounds),

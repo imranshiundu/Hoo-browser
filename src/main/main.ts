@@ -7,7 +7,7 @@ import { shouldBlockRequest, getRandomUserAgent, isMaliciousUrl, stripJunkReques
 import { StorageService } from "./storage";
 import { setupAuthHandlers } from "./auth";
 import { MegaSyncService } from "./sync";
-import { checkForHooUpdates } from "./update-service";
+import { checkForAppUpdates, installAppUpdate, initAutoUpdater, shouldAutoCheckOnStartup, resolveUpdateChannel, hasSourceGitRepo } from "./update-service";
 import { markWindowReady, trackNetworkRequest, trackNetworkBytes, getPerformanceSnapshot } from "./performance-monitor";
 import { shouldBlockForLowData } from "./network-policy";
 import { setupDownloadManager, openDownloadFolder } from "./download-manager";
@@ -575,7 +575,12 @@ ipcMain.handle('window-maximize', async (): Promise<void> => {
 });
 ipcMain.handle('window-close', async (): Promise<void> => { mainWindow?.close(); });
 ipcMain.handle('window-reload', async (): Promise<void> => { mainWindow?.webContents.reloadIgnoringCache(); });
-ipcMain.handle('check-for-updates', async (): Promise<any> => checkForHooUpdates());
+ipcMain.handle('check-for-updates', async (): Promise<any> => checkForAppUpdates());
+ipcMain.handle('install-app-update', async (): Promise<{ ok: boolean; message: string }> => installAppUpdate());
+ipcMain.handle('get-update-channel', async (): Promise<{ channel: string; isPackaged: boolean }> => ({
+    channel: resolveUpdateChannel({ isPackaged: app.isPackaged, hasGitRepo: hasSourceGitRepo() }),
+    isPackaged: app.isPackaged
+}));
 
 ipcMain.handle('get-performance-snapshot', async (): Promise<any> => getPerformanceSnapshot({
     mainWindow,
@@ -1215,12 +1220,27 @@ function runViewAction(action: (view: BrowserView) => void): void {
 }
 
 async function checkUpdatesFromMenu(): Promise<void> {
-    const result = await checkForHooUpdates();
-    const message = result.status === 'updated'
-        ? `Version ${result.message || 'newer'} is available. Download it from the GitHub releases page.`
-        : result.message || 'Hoo Browser is up to date.';
-    if (!mainWindow) return;
-    void dialog.showMessageBox(mainWindow, { type: 'info', title: 'Hoo Browser updates', message, buttons: ['OK'] });
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const result = await checkForAppUpdates();
+    if (result.status === 'restart-required') {
+        const { response } = await dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'Hoo Browser updates',
+            message: result.message,
+            buttons: ['Restart to update', 'Later'],
+            defaultId: 0,
+            cancelId: 1
+        });
+        if (response === 0) await installAppUpdate();
+        return;
+    }
+    void dialog.showMessageBox(mainWindow, {
+        type: result.ok ? 'info' : 'warning',
+        title: 'Hoo Browser updates',
+        message: result.message,
+        detail: result.status === 'unsupported' || result.status === 'downloading' ? 'Releases: https://github.com/imranshiundu/Hoo-browser/releases' : undefined,
+        buttons: ['OK']
+    });
 }
 
 function setupAppMenu(): void {
@@ -1311,6 +1331,13 @@ function setupAppMenu(): void {
 app.whenReady().then((): void => {
     if (!gotSingleInstanceLock) return; // another Hoo instance owns the profile
     createWindow();
+    // Real browsers keep themselves current: packaged installs check GitHub
+    // Releases shortly after launch, download silently, and offer a restart.
+    // The shell listens on 'app-update-status' for live progress.
+    initAutoUpdater((status): void => sendToShell('app-update-status', status));
+    if (shouldAutoCheckOnStartup({ isPackaged: app.isPackaged, disabledEnv: process.env.HOO_DISABLE_AUTO_UPDATE })) {
+        setTimeout((): void => { void checkForAppUpdates(); }, 5000);
+    }
 });
 // macOS keeps the app alive with the window closed; the dock click must
 // reopen a window instead of leaving a zombie process.

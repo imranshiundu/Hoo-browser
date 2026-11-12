@@ -25,6 +25,11 @@ module.exports = [
         entry: './src/main/main.ts',
         target: 'electron-main',
         devtool: isProduction ? false : 'source-map',
+        // electron-updater must stay a runtime require: bundling it breaks its
+        // dynamic platform-specific updater loading inside the ASAR.
+        externals: {
+            'electron-updater': 'commonjs electron-updater',
+        },
         module: {
             rules: [baseTsRule],
         },

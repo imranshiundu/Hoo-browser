@@ -41,8 +41,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [deepSpoof, setDeepSpoof] = React.useState(true);
     const [retention, setRetention] = React.useState<PrivacySettings['dataRetention']>('forever');
     const [updateState, setUpdateState] = React.useState<UpdateState | null>(null);
+    const [updateChannel, setUpdateChannel] = React.useState<'electron-updater' | 'git-source' | 'none'>('none');
+    const [autoStatus, setAutoStatus] = React.useState<AppUpdateStatus | null>(null);
     const [sitePermissions, setSitePermissions] = React.useState<SitePermissionRow[]>([]);
     const [siteZoomCount, setSiteZoomCount] = React.useState(0);
+
+    // The updater pushes live status for the lifetime of the app: subscribe once
+    // so background download progress is captured even while this modal is closed.
+    React.useEffect(() => {
+        void window.electronAPI?.getUpdateChannel?.()
+            .then(info => { if (info) setUpdateChannel(info.channel); })
+            .catch(() => { /* channel stays 'none' */ });
+        window.electronAPI?.onAppUpdateStatus?.(status => setAutoStatus(status));
+    }, []);
 
     React.useEffect(() => {
         const loadSettings = async (): Promise<void> => {
@@ -86,7 +97,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     };
 
     const checkForUpdates = async (): Promise<void> => {
-        setUpdateState({ status: 'checking', message: 'Checking GitHub… pulling only what changed.' });
+        setUpdateState({
+            status: 'checking',
+            message: updateChannel === 'git-source'
+                ? 'Checking GitHub… pulling only what changed.'
+                : 'Checking GitHub Releases…'
+        });
         try {
             const result = await window.electronAPI?.checkForUpdates?.();
             if (!result) {
@@ -103,9 +119,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
         }
     };
 
-    const restartHoo = (): void => {
-        window.close();
+    // Packaged builds use electron-updater's quitAndInstall; source checkouts
+    // relaunch into the freshly pulled build. Both live behind one IPC call.
+    const restartToUpdate = (): void => {
+        void window.electronAPI?.installAppUpdate?.();
     };
+
+    const sourceUpdateReady = updateState?.status === 'success' && updateState.message.toLowerCase().includes('restart');
+    const autoReady = autoStatus?.phase === 'downloaded';
 
     if (!isOpen) return null;
 
@@ -213,24 +234,73 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
 
                     <section className="settings-section update-section">
                         <h3>Updates</h3>
-                        <div className="update-card">
-                            <div className="update-card-copy">
-                                <strong>Fast GitHub updater</strong>
-                                <span>Pulls changes, skips dependency install when package files did not change, then rebuilds only when needed.</span>
+                        {updateChannel === 'electron-updater' && (
+                            <>
+                                <div className="update-card">
+                                    <div className="update-card-copy">
+                                        <strong>Automatic updates</strong>
+                                        <span>Hoo checks GitHub Releases when it starts and downloads new versions in the background. Restart once to switch over.</span>
+                                    </div>
+                                    <button className="primary-button update-button" onClick={() => void checkForUpdates()} disabled={updateState?.status === 'checking'}>
+                                        {updateState?.status === 'checking' ? <RefreshCw size={16} className="spin" /> : <Zap size={16} />}
+                                        {updateState?.status === 'checking' ? 'Checking…' : 'Check for updates'}
+                                    </button>
+                                </div>
+                                {autoStatus && autoStatus.phase !== 'idle' && (
+                                    <div className={`update-message ${autoStatus.phase === 'error' ? 'failed' : autoStatus.phase === 'current' ? 'success' : 'checking'}`}>
+                                        <div className="update-status-line">
+                                            {autoStatus.phase === 'downloaded' || autoStatus.phase === 'current'
+                                                ? <CheckCircle2 size={16} />
+                                                : autoStatus.phase === 'error'
+                                                    ? <AlertTriangle size={16} />
+                                                    : <RefreshCw size={16} className="spin" />}
+                                            <p>{autoStatus.message}</p>
+                                        </div>
+                                        {autoStatus.phase === 'downloading' && typeof autoStatus.percent === 'number' && (
+                                            <div className="update-progress" role="progressbar" aria-valuenow={Math.round(autoStatus.percent)} aria-valuemin={0} aria-valuemax={100}>
+                                                <div className="update-progress-fill" style={{ width: `${Math.min(100, Math.max(0, autoStatus.percent))}%` }} />
+                                            </div>
+                                        )}
+                                        {autoReady && (
+                                            <button className="primary-button" onClick={restartToUpdate}>
+                                                <RotateCw size={14} /> Restart to update
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        {updateChannel === 'git-source' && (
+                            <div className="update-card">
+                                <div className="update-card-copy">
+                                    <strong>Fast GitHub updater</strong>
+                                    <span>Pulls changes, skips dependency install when package files did not change, then rebuilds only when needed.</span>
+                                </div>
+                                <button className="primary-button update-button" onClick={() => void checkForUpdates()} disabled={updateState?.status === 'checking'}>
+                                    {updateState?.status === 'checking' ? <RefreshCw size={16} className="spin" /> : <Zap size={16} />}
+                                    {updateState?.status === 'checking' ? 'Updating…' : 'Update now'}
+                                </button>
                             </div>
-                            <button className="primary-button update-button" onClick={() => void checkForUpdates()} disabled={updateState?.status === 'checking'}>
-                                {updateState?.status === 'checking' ? <RefreshCw size={16} className="spin" /> : <Zap size={16} />}
-                                {updateState?.status === 'checking' ? 'Updating…' : 'Update now'}
-                            </button>
-                        </div>
+                        )}
+                        {updateChannel === 'none' && (
+                            <div className="update-card">
+                                <div className="update-card-copy">
+                                    <strong>Manual updates</strong>
+                                    <span>This copy cannot self-update. Get the latest installer from GitHub Releases and Hoo will pick it up from there.</span>
+                                </div>
+                                <button className="secondary-button update-button" onClick={() => void window.electronAPI?.navigateTo?.('https://github.com/imranshiundu/Hoo-browser/releases')}>
+                                    <Download size={16} /> Open releases
+                                </button>
+                            </div>
+                        )}
                         {updateState && (
                             <div className={`update-message ${updateState.status}`}>
                                 <div className="update-status-line">
                                     {updateState.status === 'success' ? <CheckCircle2 size={16} /> : updateState.status === 'failed' ? <AlertTriangle size={16} /> : <RefreshCw size={16} className="spin" />}
                                     <p>{updateState.message}</p>
                                 </div>
-                                {updateState.status === 'success' && updateState.message.toLowerCase().includes('restart') && (
-                                    <button className="secondary-button" onClick={restartHoo}>Close Hoo so I can restart</button>
+                                {(sourceUpdateReady || autoReady) && (
+                                    <button className="secondary-button" onClick={restartToUpdate}>Restart to update</button>
                                 )}
                                 {updateState.details && <pre>{updateState.details}</pre>}
                             </div>

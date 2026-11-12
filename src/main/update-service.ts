@@ -3,19 +3,191 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-type UpdateResult = {
+// Hoo ships with two update channels:
+//
+//  1. Packaged installs (AppImage, deb, NSIS, DMG) use electron-updater against
+//     GitHub Releases. Hoo checks on startup, downloads the new build in the
+//     background, and offers a "Restart to update" action — the way a real
+//     browser updates itself.
+//  2. Source checkouts keep the git-based updater: pull main, install deps only
+//     when package files changed, rebuild only when build inputs changed.
+//
+// Everything else (a plain folder without .git, an exotic target) gets an
+// honest "unsupported" answer with manual instructions instead of a fake check.
+
+export type UpdateChannel = 'electron-updater' | 'git-source' | 'none';
+
+export type AppUpdatePhase = 'idle' | 'checking' | 'downloading' | 'downloaded' | 'current' | 'error';
+
+export interface AppUpdateStatus {
+    phase: AppUpdatePhase;
+    message: string;
+    channel: UpdateChannel;
+    version?: string;
+    percent?: number;
+}
+
+export interface AppUpdateResult {
     ok: boolean;
-    status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed' | 'restart-required';
+    status: 'updated' | 'current' | 'unsupported' | 'busy' | 'failed' | 'restart-required' | 'downloading';
     message: string;
     details?: string;
-    appRoot?: string;
-    before?: string;
-    after?: string;
-    installRan?: boolean;
-    buildRan?: boolean;
-};
+    channel: UpdateChannel;
+    version?: string;
+}
 
+const RELEASES_URL = 'https://github.com/imranshiundu/Hoo-browser/releases';
+const MB = 1024 * 1024;
+
+let broadcastStatus: ((status: AppUpdateStatus) => void) | null = null;
+let activeChannel: UpdateChannel = 'none';
+let availableVersion: string | null = null;
+let downloadedVersion: string | null = null;
 let updateInProgress = false;
+
+// ---- Pure helpers (unit-tested) -------------------------------------------
+
+export function resolveUpdateChannel(input: { isPackaged: boolean; hasGitRepo: boolean }): UpdateChannel {
+    if (input.isPackaged) return 'electron-updater';
+    if (input.hasGitRepo) return 'git-source';
+    return 'none';
+}
+
+export function shouldAutoCheckOnStartup(input: { isPackaged: boolean; disabledEnv?: string }): boolean {
+    if (!input.isPackaged) return false;
+    return input.disabledEnv !== '1';
+}
+
+export function formatDownloadProgress(progress: { percent?: number | null; transferred?: number | null; total?: number | null }): string {
+    const percent = typeof progress.percent === 'number' && Number.isFinite(progress.percent)
+        ? Math.min(100, Math.max(0, progress.percent))
+        : null;
+    if (percent === null) return 'Downloading update…';
+    const percentText = `${percent.toFixed(1)}%`;
+    const { transferred, total } = progress;
+    if (typeof total === 'number' && total > 0 && typeof transferred === 'number' && transferred >= 0) {
+        return `${percentText} (${(transferred / MB).toFixed(1)} MB of ${(total / MB).toFixed(1)} MB)`;
+    }
+    return percentText;
+}
+
+export function friendlyUpdaterError(error: unknown): string {
+    const raw = error instanceof Error ? error.message : String(error ?? 'Unknown updater error');
+    const firstLine = raw.split('\n').map(line => line.trim()).filter(Boolean)[0] || 'Unknown updater error';
+    const lowered = firstLine.toLowerCase();
+    if (/(err_internet_disconnected|enotfound|econnrefused|etimedout|eai_again)/.test(lowered)) {
+        return 'Hoo could not reach GitHub. Updates will retry the next time Hoo starts.';
+    }
+    if (lowered.includes('signature') || lowered.includes('code sign')) {
+        return 'Auto-update needs a signed build on this platform. Download the latest installer from GitHub Releases instead.';
+    }
+    if (lowered.includes('404') || lowered.includes('latest.yml') || lowered.includes('latest-mac.yml')) {
+        return `No published release was found for this channel yet. Grab installers from ${RELEASES_URL}.`;
+    }
+    return firstLine.length > 180 ? `${firstLine.slice(0, 177)}…` : firstLine;
+}
+
+// ---- electron-updater bridge ----------------------------------------------
+
+// electron-updater is require()d lazily: only packaged builds ever load it,
+// and keeping it out of the module graph lets vitest run the pure logic
+// without dragging the whole updater tree in.
+interface AutoUpdaterLike {
+    autoDownload: boolean;
+    autoInstallOnAppQuit: boolean;
+    allowPrerelease: boolean;
+    logger: unknown;
+    on(event: string, listener: (...args: any[]) => void): unknown;
+    checkForUpdates(): Promise<any>;
+    quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
+}
+
+let autoUpdaterInstance: AutoUpdaterLike | null = null;
+
+function loadAutoUpdater(): AutoUpdaterLike | null {
+    if (autoUpdaterInstance) return autoUpdaterInstance;
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        autoUpdaterInstance = require('electron-updater').autoUpdater as AutoUpdaterLike;
+        return autoUpdaterInstance;
+    } catch {
+        return null;
+    }
+}
+
+export function hasSourceGitRepo(): boolean {
+    try {
+        return fs.existsSync(path.join(app.getAppPath(), '.git'));
+    } catch {
+        return false;
+    }
+}
+
+function currentVersion(): string {
+    try { return app.getVersion(); } catch { return 'unknown'; }
+}
+
+function emit(status: Omit<AppUpdateStatus, 'channel'>): void {
+    if (broadcastStatus) broadcastStatus({ ...status, channel: activeChannel });
+}
+
+function initPackagedUpdater(): boolean {
+    const updater = loadAutoUpdater();
+    if (!updater) {
+        activeChannel = 'none';
+        return false;
+    }
+    updater.autoDownload = true;
+    updater.autoInstallOnAppQuit = true;
+    updater.allowPrerelease = false;
+    updater.logger = console;
+    updater.on('checking-for-update', (): void => {
+        emit({ phase: 'checking', message: 'Checking for Hoo updates…' });
+    });
+    updater.on('update-available', (info: any): void => {
+        availableVersion = typeof info?.version === 'string' ? info.version : null;
+        emit({
+            phase: 'downloading',
+            message: `Hoo ${availableVersion || 'update'} found — downloading in the background…`,
+            version: availableVersion || undefined
+        });
+    });
+    updater.on('update-not-available', (info: any): void => {
+        emit({ phase: 'current', message: `Hoo ${info?.version || currentVersion()} is up to date.` });
+    });
+    updater.on('download-progress', (progress: any): void => {
+        const percent = typeof progress?.percent === 'number' && Number.isFinite(progress.percent)
+            ? Math.min(100, Math.max(0, progress.percent))
+            : undefined;
+        emit({
+            phase: 'downloading',
+            message: formatDownloadProgress(progress),
+            percent
+        });
+    });
+    updater.on('update-downloaded', (info: any): void => {
+        downloadedVersion = typeof info?.version === 'string' ? info.version : downloadedVersion;
+        emit({
+            phase: 'downloaded',
+            message: `Hoo ${downloadedVersion || 'update'} is ready. Restart to finish the update.`,
+            version: downloadedVersion || undefined
+        });
+    });
+    updater.on('error', (error: unknown): void => {
+        emit({ phase: 'error', message: friendlyUpdaterError(error) });
+    });
+    return true;
+}
+
+export function initAutoUpdater(broadcast: (status: AppUpdateStatus) => void): void {
+    broadcastStatus = broadcast;
+    activeChannel = resolveUpdateChannel({ isPackaged: app.isPackaged, hasGitRepo: hasSourceGitRepo() });
+    availableVersion = null;
+    downloadedVersion = null;
+    if (activeChannel === 'electron-updater') initPackagedUpdater();
+}
+
+// ---- Git source updater ----------------------------------------------------
 
 function resolveAppRoot(): string {
     const candidates = [
@@ -106,9 +278,10 @@ function summarizeFiles(files: string[]): string {
     return `${shown}${extra}`;
 }
 
-export async function checkForHooUpdates(): Promise<UpdateResult> {
+async function checkForSourceUpdates(): Promise<AppUpdateResult> {
+    const channel: UpdateChannel = 'git-source';
     if (updateInProgress) {
-        return { ok: false, status: 'busy', message: 'Hoo is already checking for updates.' };
+        return { ok: false, status: 'busy', message: 'Hoo is already checking for updates.', channel };
     }
 
     updateInProgress = true;
@@ -123,7 +296,7 @@ export async function checkForHooUpdates(): Promise<UpdateResult> {
                 status: 'unsupported',
                 message: 'This copy is not running from the source repo, so Hoo cannot safely pull GitHub updates from inside the app.',
                 details: `Detected app root: ${appRoot}\nRun this manually instead:\ncd ~/.local/share/hoo-browser && git pull origin main && npm install --no-audit --no-fund --prefer-offline && npm run build`,
-                appRoot
+                channel
             };
         }
 
@@ -139,7 +312,7 @@ export async function checkForHooUpdates(): Promise<UpdateResult> {
                 status: 'failed',
                 message: 'Update paused because this install has local edits. Hoo will not overwrite your work.',
                 details: `Detected app root: ${appRoot}\nLocal changes:\n${status}\n\nCommit, stash, or remove those changes, then check again.`,
-                appRoot
+                channel
             };
         }
 
@@ -148,7 +321,7 @@ export async function checkForHooUpdates(): Promise<UpdateResult> {
         const remote = (await run('git', ['rev-parse', 'origin/main'], appRoot)).stdout.trim();
 
         if (local === remote) {
-            return { ok: true, status: 'current', message: 'Hoo Browser is already up to date.', details: `Checked: ${appRoot}`, appRoot, before: local, after: remote };
+            return { ok: true, status: 'current', message: 'Hoo Browser is already up to date.', details: `Checked: ${appRoot}\nCommit: ${local}`, channel };
         }
 
         const changedFiles = await changedFilesBetween(appRoot, local, remote);
@@ -176,20 +349,118 @@ export async function checkForHooUpdates(): Promise<UpdateResult> {
                 ? 'Hoo Browser updated and rebuilt. Restart Hoo to use the new version.'
                 : 'Hoo Browser updated. Restart Hoo to use the new version.',
             details: `Updated: ${appRoot}\nFrom: ${local}\nTo: ${remote}\nInstall: ${needsInstall ? 'yes' : 'skipped'}\nBuild: ${needsBuild ? 'yes' : 'skipped'}\n\nChanged files:\n${summarizeFiles(changedFiles)}`,
-            appRoot,
-            before: local,
-            after: remote,
-            installRan: needsInstall,
-            buildRan: needsBuild
+            channel
         };
     } catch (error: any) {
         return {
             ok: false,
             status: 'failed',
             message: 'Hoo could not complete the update check.',
-            details: error?.message || String(error)
+            details: error?.message || String(error),
+            channel
         };
     } finally {
         updateInProgress = false;
     }
+}
+
+// ---- Unified entry points used by main.ts ----------------------------------
+
+export async function checkForAppUpdates(): Promise<AppUpdateResult> {
+    const channel = resolveUpdateChannel({ isPackaged: app.isPackaged, hasGitRepo: hasSourceGitRepo() });
+    activeChannel = channel;
+
+    if (channel === 'git-source') return checkForSourceUpdates();
+
+    if (channel !== 'electron-updater') {
+        return {
+            ok: false,
+            status: 'unsupported',
+            message: 'This copy cannot self-update. Download the latest Hoo installer from GitHub Releases.',
+            details: RELEASES_URL,
+            channel
+        };
+    }
+
+    if (updateInProgress) {
+        return { ok: false, status: 'busy', message: 'Hoo is already checking for updates.', channel };
+    }
+
+    if (downloadedVersion) {
+        return {
+            ok: true,
+            status: 'restart-required',
+            message: `Hoo ${downloadedVersion} is downloaded. Restart to finish the update.`,
+            channel,
+            version: downloadedVersion
+        };
+    }
+
+    const updater = loadAutoUpdater();
+    if (!updater || !initPackagedUpdater()) {
+        return {
+            ok: false,
+            status: 'unsupported',
+            message: 'The auto-updater is unavailable in this build. Download installers from GitHub Releases.',
+            details: RELEASES_URL,
+            channel
+        };
+    }
+
+    updateInProgress = true;
+    availableVersion = null;
+    emit({ phase: 'checking', message: 'Checking for Hoo updates…' });
+    try {
+        await updater.checkForUpdates();
+        if (downloadedVersion) {
+            return {
+                ok: true,
+                status: 'restart-required',
+                message: `Hoo ${downloadedVersion} is downloaded. Restart to finish the update.`,
+                channel,
+                version: downloadedVersion
+            };
+        }
+        if (availableVersion) {
+            return {
+                ok: true,
+                status: 'downloading',
+                message: `Hoo ${availableVersion} is downloading in the background. Hoo will prompt when it is ready.`,
+                channel,
+                version: availableVersion
+            };
+        }
+        return { ok: true, status: 'current', message: `Hoo ${currentVersion()} is up to date.`, channel };
+    } catch (error: unknown) {
+        const message = friendlyUpdaterError(error);
+        emit({ phase: 'error', message });
+        return { ok: false, status: 'failed', message, channel };
+    } finally {
+        updateInProgress = false;
+    }
+}
+
+export async function installAppUpdate(): Promise<{ ok: boolean; message: string }> {
+    const channel = activeChannel;
+    if (channel === 'electron-updater') {
+        const updater = loadAutoUpdater();
+        if (!updater) return { ok: false, message: 'The auto-updater is unavailable in this build.' };
+        if (!downloadedVersion) {
+            return { ok: false, message: 'No downloaded update is ready yet. Check for updates first.' };
+        }
+        updater.quitAndInstall(false, true);
+        return { ok: true, message: `Restarting Hoo to install ${downloadedVersion}…` };
+    }
+    if (channel === 'git-source') {
+        // The source updater already pulled and rebuilt dist; a relaunch is
+        // all that is left to run the new build.
+        try {
+            app.relaunch();
+            app.exit(0);
+            return { ok: true, message: 'Restarting Hoo…' };
+        } catch (error: unknown) {
+            return { ok: false, message: error instanceof Error ? error.message : 'Could not relaunch Hoo.' };
+        }
+    }
+    return { ok: false, message: 'This copy cannot self-update. Download the latest installer from GitHub Releases.' };
 }
