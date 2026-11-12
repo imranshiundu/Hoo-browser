@@ -285,3 +285,35 @@
         max-width: 168px;
     }
 }
+
+/* Loading spinner inside a tab (replaces the favicon while the page loads) */
+.tab-spinner {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 106, 0, 0.22);
+    border-top-color: #ff8b2b;
+    animation: tab-spin 700ms linear infinite;
+}
+
+@keyframes tab-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Privacy-preserving letter avatar used until a page reports its own favicon */
+.tab-favicon-initial {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    user-select: none;
+}
+
+.tab-action-btn.audio-btn { color: #ffb06a; }
+.tab-action-btn.audio-btn.muted { color: rgba(255, 255, 255, 0.45); }

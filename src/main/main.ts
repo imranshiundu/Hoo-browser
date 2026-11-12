@@ -1,4 +1,4 @@
-import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard } from "electron";
+import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard, dialog } from "electron";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
@@ -10,6 +10,9 @@ import { MegaSyncService } from "./sync";
 import { checkForHooUpdates } from "./update-service";
 import { markWindowReady, trackNetworkRequest, trackNetworkBytes, getPerformanceSnapshot } from "./performance-monitor";
 import { shouldBlockForLowData } from "./network-policy";
+import { setupDownloadManager, openDownloadFolder } from "./download-manager";
+import { setupBrowserContextMenu } from "./browser-context-menu";
+import { createTabIdFactory, stepZoomFactor, zoomPercent, crashReasonLabel } from "./tab-utils";
 
 app.setName("Hoo Browser");
 app.commandLine.appendSwitch('disable-background-networking');
@@ -30,6 +33,12 @@ let splitTabId: string | null = null;
 let manualBounds: { x: number, y: number, width: number, height: number } | null = null;
 let openClawLoaded = false;
 
+// Runtime per-tab state mirrored by the shell UI.
+const nextTabId = createTabIdFactory();
+const zoomByTab: Map<string, number> = new Map();
+const audibleTabs: Set<string> = new Set();
+const mutedTabs: Set<string> = new Set();
+
 let persistentData = StorageService.load();
 
 let privacySettings = {
@@ -46,6 +55,10 @@ let privacySettings = {
 };
 
 const WHATSAPP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) WhatsApp/2.24.4.78 Chrome/120.0.6099.225 Electron/30.0.0 Safari/537.36";
+
+function sendToShell(channel: string, ...args: unknown[]): void {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, ...args);
+}
 
 function resolveAssetPath(...segments: string[]): string {
     const distAsset = path.join(__dirname, "../renderer", ...segments);
@@ -74,8 +87,13 @@ function hideAllBrowserViews(): void {
     splitTabId = null;
 }
 
+function setWindowTitle(title: string): void {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setTitle(title);
+}
+
 function showHomeForTab(tabId?: string): void {
     hideAllBrowserViews();
+    setWindowTitle('New Tab - Hoo Browser');
     if (tabId) {
         const data = StorageService.load();
         const tab = data.tabs.find(t => t.id === tabId);
@@ -86,7 +104,7 @@ function showHomeForTab(tabId?: string): void {
             StorageService.save({ tabs: data.tabs, activeTabId: tabId });
         }
     }
-    mainWindow?.webContents.send('switch-to-home', tabId);
+    sendToShell('switch-to-home', tabId);
 }
 
 function buildErrorPage(url: string, description: string): string {
@@ -102,7 +120,7 @@ function buildBlockedPage(url: string, reason: string): string {
 function blockNavigationIfUnsafe(tabId: string, view: BrowserView, event: Electron.Event, targetUrl: string, sourceUrl?: string): boolean {
     if (isHardBlockedHost(targetUrl) || isLikelyForcedRedirect(targetUrl, sourceUrl || view.webContents.getURL())) {
         event.preventDefault();
-        mainWindow?.webContents.send('tab-loading-state', tabId, false, view.webContents.getURL());
+        sendToShell('tab-loading-state', tabId, false, view.webContents.getURL());
         void view.webContents.loadURL(buildBlockedPage(targetUrl, 'A page tried to push you to another site that looks like a popup, scam, torrent/VPN advert, or forced redirect. Hoo stopped it instead of letting it open a new window.'));
         return true;
     }
@@ -150,9 +168,31 @@ function injectSitePolish(view: BrowserView): void {
     }
 }
 
+function sendNavState(tabId: string, view: BrowserView): void {
+    try {
+        const history = view.webContents.navigationHistory;
+        sendToShell('nav-state-updated', tabId, history.canGoBack(), history.canGoForward());
+    } catch {
+        // A destroyed view can no longer report navigation state.
+    }
+}
+
+function cleanupTabRuntimeState(tabId: string): void {
+    zoomByTab.delete(tabId);
+    audibleTabs.delete(tabId);
+    mutedTabs.delete(tabId);
+}
+
 function attachViewHandlers(tabId: string, view: BrowserView): void {
     view.setAutoResize({ width: true, height: true });
     view.webContents.setBackgroundThrottling(false);
+
+    // Right-click menu for web pages: copy, search selection, open links,
+    // save images. Without this a right click did literally nothing.
+    setupBrowserContextMenu(view, {
+        openUrlInNewTab: (url): void => { void openUrlInNewTabInternal(url); },
+        openUrlInCurrentTab: (url): void => { void navigateTabInternal(tabId, url); }
+    });
 
     view.webContents.setWindowOpenHandler((details): Electron.WindowOpenHandlerResponse => {
         const sourceUrl = view.webContents.getURL();
@@ -161,7 +201,7 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
             return { action: 'deny' };
         }
         if (details.disposition === 'foreground-tab' || details.disposition === 'background-tab' || details.disposition === 'new-window') {
-            mainWindow?.webContents.send('open-url-in-new-tab', details.url);
+            sendToShell('open-url-in-new-tab', details.url);
             return { action: 'deny' };
         }
         return { action: 'deny' };
@@ -183,7 +223,7 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
 
     view.webContents.on('did-start-navigation', (event, url, isInPlace, isMainFrame): void => {
         if (isMainFrame && !isInPlace && blockNavigationIfUnsafe(tabId, view, event, url)) return;
-        mainWindow?.webContents.send('tab-loading-state', tabId, true, url);
+        sendToShell('tab-loading-state', tabId, true, url);
         if (privacySettings.deepSpoof && url.includes('web.whatsapp.com')) {
             view.webContents.setUserAgent(WHATSAPP_UA);
             void view.webContents.executeJavaScript(`
@@ -200,13 +240,15 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
         injectSitePolish(view);
         const title = view.webContents.getTitle();
         const url = view.webContents.getURL();
-        mainWindow?.webContents.send('tab-loading-state', tabId, false, url);
-        if (title) mainWindow?.webContents.send('tab-title-updated', tabId, title, url);
+        sendToShell('tab-loading-state', tabId, false, url);
+        if (title) {
+            sendToShell('tab-title-updated', tabId, title, url);
+            if (tabId === activeTabId) setWindowTitle(`${title} - Hoo Browser`);
+        }
     });
 
     view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL): void => {
-        mainWindow?.webContents.send('tab-loading-state', tabId, false, validatedURL);
-        mainWindow?.webContents.send('tab-load-error', tabId, errorCode, errorDescription, validatedURL);
+        sendToShell('tab-loading-state', tabId, false, validatedURL);
         if (errorCode !== -3 && validatedURL && !validatedURL.startsWith('data:')) {
             void view.webContents.loadURL(buildErrorPage(validatedURL, errorDescription));
         }
@@ -214,7 +256,7 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
 
     view.webContents.on('page-title-updated', (_event, title): void => {
         const url = view.webContents.getURL();
-        mainWindow?.webContents.send('tab-title-updated', tabId, title, url);
+        sendToShell('tab-title-updated', tabId, title, url);
         const stData = StorageService.load();
         const targetTab = stData.tabs.find(t => t.id === tabId);
         if (targetTab) {
@@ -222,6 +264,74 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
             targetTab.url = url;
             StorageService.save({ tabs: stData.tabs });
         }
+        if (tabId === activeTabId) setWindowTitle(`${title} - Hoo Browser`);
+    });
+
+    view.webContents.on('did-navigate', (): void => {
+        sendNavState(tabId, view);
+    });
+
+    view.webContents.on('did-navigate-in-page', (_event, _url, isMainFrame): void => {
+        if (isMainFrame) sendNavState(tabId, view);
+    });
+
+    // Real favicons captured from the page itself. Tabs used to depend on a
+    // Google favicon service, which leaked every visited domain and failed offline.
+    view.webContents.on('page-favicon-updated', (_event, favicons: string[]): void => {
+        const icon = favicons && favicons.length ? favicons[favicons.length - 1] : '';
+        if (icon && !icon.startsWith('data:')) sendToShell('tab-favicon-updated', tabId, icon);
+    });
+
+    view.webContents.on('audio-state-changed', (event): void => {
+        const audible = event.audible;
+        if (audible) audibleTabs.add(tabId);
+        else audibleTabs.delete(tabId);
+        sendToShell('tab-audio-updated', tabId, audible, mutedTabs.has(tabId));
+    });
+
+    // Link hover preview in the shell's corner overlay.
+    view.webContents.on('update-target-url', (_event, url: string): void => {
+        if (tabId === activeTabId) sendToShell('page-target-url', url || '');
+    });
+
+    // A crashed renderer used to leave a silent blank rectangle.
+    view.webContents.on('render-process-gone', (_event, details): void => {
+        audibleTabs.delete(tabId);
+        mutedTabs.delete(tabId);
+        sendToShell('tab-loading-state', tabId, false, view.webContents.getURL());
+        const url = view.webContents.getURL();
+        StorageService.recordCrashedTab({
+            id: nextTabId(),
+            tabId,
+            url,
+            title: view.webContents.getTitle() || 'Tab crashed',
+            reason: details.reason,
+            exitCode: details.exitCode,
+            crashedAt: Date.now()
+        });
+        StorageService.markTabLifecycle(tabId, 'crashed');
+        sendToShell('tab-load-error', tabId, -1, details.reason, url);
+        if (!url.startsWith('data:') && !isHomeUrl(url)) {
+            void view.webContents.loadURL(buildErrorPage(url, `${crashReasonLabel(details.reason)} Hoo kept the tab so you can reload it.`));
+        }
+    });
+
+    // Sites with a beforeunload guard (unsaved forms) now ask instead of silently discarding.
+    view.webContents.on('will-prevent-unload', (event): void => {
+        void dialog.showMessageBox(mainWindow!, {
+            type: 'question',
+            buttons: ['Leave', 'Stay'],
+            defaultId: 1,
+            cancelId: 1,
+            message: 'Leave this site?',
+            detail: 'Changes you made on this page may not be saved.'
+        }).then(({ response }): void => {
+            if (response === 0) event.preventDefault();
+        }).catch((): undefined => undefined);
+    });
+
+    view.webContents.on('found-in-page', (_event, result): void => {
+        sendToShell('find-result', tabId, result.activeMatchOrdinal, result.matches);
     });
 }
 
@@ -273,6 +383,8 @@ function createWindow(): void {
     if (!app.isPackaged && process.env.HOO_OPEN_DEVTOOLS === '1') mainWindow.webContents.openDevTools();
 
     setupPrivacyFilters();
+    setupDownloadManager((): BrowserWindow | null => mainWindow);
+    setupAppMenu();
     setupAuthHandlers(mainWindow);
     restoreTabs();
 
@@ -295,6 +407,7 @@ function createWindow(): void {
 ipcMain.handle('hide-browser-view', async (): Promise<void> => {
     hideAllBrowserViews();
     manualBounds = null;
+    setWindowTitle('New Tab - Hoo Browser');
 });
 
 ipcMain.handle('update-view-bounds', async (_event, bounds: { x: number, y: number, width: number, height: number }): Promise<void> => {
@@ -415,9 +528,15 @@ function showBrowserView(tabId: string, keepSplit = false): void {
         }
     });
 
-    updateBrowserViewBounds();
-}
+    const savedZoom = zoomByTab.get(tabId);
+    if (savedZoom !== undefined) view.webContents.setZoomFactor(savedZoom);
 
+    updateBrowserViewBounds();
+    sendNavState(tabId, view);
+    const stData = StorageService.load();
+    const tabRecord = stData.tabs.find(t => t.id === tabId);
+    setWindowTitle(`${tabRecord?.title || view.webContents.getTitle() || 'Hoo Browser'} - Hoo Browser`);
+}
 
 ipcMain.handle('show-tab-menu', async (_event, payload: {
     x: number;
@@ -515,8 +634,20 @@ ipcMain.handle('start-openclaw', async (): Promise<any> => {
     });
 });
 
+function purgeGhostHomeTabs(): void {
+    // Navigations from the home page used to leave `about:blank` tab records
+    // behind, which came back as a pile of phantom "New Tab" tabs after restart.
+    const data = StorageService.load();
+    const hadGhosts = data.tabs.some(t => t.type === 'browser' && isHomeUrl(t.url));
+    if (hadGhosts) {
+        data.tabs = data.tabs.filter(t => !(t.type === 'browser' && isHomeUrl(t.url)));
+        StorageService.save({ tabs: data.tabs });
+    }
+}
+
 ipcMain.handle('get-initial-data', async (): Promise<any> => {
     StorageService.cleanupHistory(privacySettings.dataRetention as any);
+    purgeGhostHomeTabs();
     const data = StorageService.load();
     return { tabs: data.tabs, history: data.history, downloads: data.downloads, crashedTabs: data.crashedTabs, settings: privacySettings, activeTabId: data.activeTabId };
 });
@@ -526,12 +657,14 @@ function createBrowserViewForTab(tabId: string, partition?: string): BrowserView
     browserViews.set(tabId, view);
     applyPrivacyToSession(view.webContents.session);
     attachViewHandlers(tabId, view);
+    const savedZoom = zoomByTab.get(tabId);
+    if (savedZoom !== undefined) view.webContents.setZoomFactor(savedZoom);
     return view;
 }
 
 ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isApp?: boolean, title?: string): Promise<string | null> => {
     if (!mainWindow) return null;
-    const tabId = Date.now().toString();
+    const tabId = nextTabId();
     const data = StorageService.load();
     const isHome = isHomeUrl(url);
     data.tabs.push({ id: tabId, type: 'browser', title: title || (isApp ? 'App' : 'New Tab'), url: isHome ? 'about:blank' : url, isApp, partition, lastActiveAt: Date.now() });
@@ -611,7 +744,7 @@ ipcMain.handle('nuclear-wipe', async (): Promise<void> => {
     app.exit(0);
 });
 
-ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promise<void> => {
+async function navigateTabInternal(tabId: string, url: string): Promise<void> {
     if (isHomeUrl(url)) {
         const oldView = browserViews.get(tabId);
         if (oldView) {
@@ -647,6 +780,10 @@ ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promi
         console.error(`[Main] Failed to load URL ${url}:`, error);
         void view.webContents.loadURL(buildErrorPage(finalUrl, 'The browser could not start this navigation.'));
     }
+}
+
+ipcMain.handle('navigate-tab', async (_event, tabId: string, url: string): Promise<void> => {
+    await navigateTabInternal(tabId, url);
 });
 
 ipcMain.handle('go-back', async (_event, tabId: string): Promise<void> => {
@@ -660,6 +797,10 @@ ipcMain.handle('go-forward', async (_event, tabId: string): Promise<void> => {
     if (history?.canGoForward()) history.goForward();
 });
 ipcMain.handle('reload', async (_event, tabId: string): Promise<void> => { browserViews.get(tabId)?.webContents.reload(); });
+ipcMain.handle('stop-loading', async (_event, tabId: string): Promise<void> => {
+    const view = browserViews.get(tabId);
+    if (view && !view.webContents.isDestroyed()) view.webContents.stop();
+});
 
 ipcMain.handle('rename-tab', async (_event, tabId: string, title: string): Promise<void> => {
     const data = StorageService.load();
@@ -667,6 +808,7 @@ ipcMain.handle('rename-tab', async (_event, tabId: string, title: string): Promi
     if (tab) {
         tab.title = title;
         StorageService.save({ tabs: data.tabs });
+        if (tabId === activeTabId) setWindowTitle(`${title} - Hoo Browser`);
     }
 });
 
@@ -677,6 +819,7 @@ ipcMain.handle('close-tab', async (_event, tabId: string): Promise<void> => {
         mainWindow?.removeBrowserView(view);
         browserViews.delete(tabId);
     }
+    cleanupTabRuntimeState(tabId);
     const data = StorageService.load();
     data.tabs = data.tabs.filter(t => t.id !== tabId);
     StorageService.save({ tabs: data.tabs });
@@ -693,29 +836,216 @@ ipcMain.handle('close-tab', async (_event, tabId: string): Promise<void> => {
 
 ipcMain.handle('toggle-sidebar', async (): Promise<void> => updateBrowserViewBounds());
 
-ipcMain.handle('navigate-to', async (_event, url: string): Promise<string | null> => {
+async function openUrlInNewTabInternal(url: string): Promise<string | null> {
     if (!mainWindow) return null;
     if (isHomeUrl(url)) {
-        const tabId = Date.now().toString();
+        const tabId = nextTabId();
         const data = StorageService.load();
         data.tabs.push({ id: tabId, type: 'browser', title: 'New Tab', url: 'about:blank', lastActiveAt: Date.now() });
         StorageService.save({ tabs: data.tabs, activeTabId: tabId });
         showHomeForTab(tabId);
         return tabId;
     }
+    purgeGhostHomeTabs();
     let finalUrl = url;
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:') && !url.startsWith('data:')) finalUrl = 'https://' + url;
     if (await isMaliciousUrl(finalUrl)) return null;
-    const tabId = Date.now().toString();
+    const tabId = nextTabId();
     const view = createBrowserViewForTab(tabId);
     showBrowserView(tabId);
     void view.webContents.loadURL(finalUrl);
     const data = StorageService.load();
     data.tabs.push({ id: tabId, type: 'browser', title: 'Loading...', url: finalUrl, lastActiveAt: Date.now() });
     StorageService.save({ tabs: data.tabs, activeTabId: tabId });
-    mainWindow.webContents.send('switch-to-browser', tabId);
+    data.history.push({ url: finalUrl, title: finalUrl, timestamp: Date.now() });
+    StorageService.save({ history: data.history });
+    sendToShell('switch-to-browser', tabId);
     return tabId;
+}
+
+ipcMain.handle('navigate-to', async (_event, url: string): Promise<string | null> => {
+    return openUrlInNewTabInternal(url);
 });
+
+// ---- Find in page -------------------------------------------------------
+
+ipcMain.handle('find-in-page', async (_event, tabId: string, query: string, options?: { forward?: boolean; findNext?: boolean }): Promise<void> => {
+    const view = browserViews.get(tabId);
+    if (!view || view.webContents.isDestroyed() || !query.trim()) return;
+    view.webContents.findInPage(query, { forward: options?.forward !== false, findNext: options?.findNext === true });
+});
+
+ipcMain.handle('stop-find-in-page', async (_event, tabId: string): Promise<void> => {
+    const view = browserViews.get(tabId);
+    if (view && !view.webContents.isDestroyed()) view.webContents.stopFindInPage('clearSelection');
+});
+
+// ---- Zoom ---------------------------------------------------------------
+
+function applyZoomToActiveView(direction: 'in' | 'out' | 'reset'): void {
+    const view = getActiveView();
+    if (!view || !activeTabId || view.webContents.isDestroyed()) return;
+    const next = stepZoomFactor(view.webContents.getZoomFactor(), direction);
+    view.webContents.setZoomFactor(next);
+    zoomByTab.set(activeTabId, next);
+    sendToShell('zoom-changed', activeTabId, zoomPercent(next));
+}
+
+// ---- Tab audio ----------------------------------------------------------
+
+ipcMain.handle('toggle-tab-mute', async (_event, tabId: string): Promise<void> => {
+    const view = browserViews.get(tabId);
+    if (!view || view.webContents.isDestroyed()) return;
+    const nextMuted = !view.webContents.isAudioMuted();
+    view.webContents.setAudioMuted(nextMuted);
+    if (nextMuted) mutedTabs.add(tabId);
+    else mutedTabs.delete(tabId);
+    sendToShell('tab-audio-updated', tabId, audibleTabs.has(tabId), nextMuted);
+});
+
+// ---- Downloads ----------------------------------------------------------
+
+ipcMain.handle('get-downloads', async (): Promise<any[]> => {
+    const data = StorageService.load();
+    return [...(data.downloads || [])].slice(-100).reverse();
+});
+
+ipcMain.handle('open-download', async (_event, id: string): Promise<{ ok: boolean; error?: string }> => {
+    const data = StorageService.load();
+    const record = (data.downloads || []).find(item => item.id === id);
+    if (!record) return { ok: false, error: 'Download record not found.' };
+    if (record.state !== 'completed' || !fs.existsSync(record.savePath)) {
+        openDownloadFolder(record.savePath);
+        return { ok: false, error: 'File is not ready yet; opened the folder instead.' };
+    }
+    const result = await shell.openPath(record.savePath);
+    return result ? { ok: false, error: result } : { ok: true };
+});
+
+ipcMain.handle('show-download-in-folder', async (_event, id: string): Promise<boolean> => {
+    const data = StorageService.load();
+    const record = (data.downloads || []).find(item => item.id === id);
+    if (!record) return false;
+    openDownloadFolder(record.savePath);
+    return true;
+});
+
+ipcMain.handle('clear-downloads', async (): Promise<void> => {
+    StorageService.save({ downloads: [] });
+    sendToShell('download-list-cleared');
+});
+
+// ---- History ------------------------------------------------------------
+
+ipcMain.handle('get-history', async (): Promise<any[]> => {
+    const data = StorageService.load();
+    return [...(data.history || [])].slice(-60).reverse();
+});
+
+// ---- Application menu ---------------------------------------------------
+// Menu accelerators are the only reliable way to make browser shortcuts work
+// while a web page has focus: shell-side keydown listeners never see keys that
+// land inside a BrowserView.
+
+function sendUiShortcut(action: string): void {
+    sendToShell('ui-shortcut', action);
+}
+
+function runViewAction(action: (view: BrowserView) => void): void {
+    const view = getActiveView();
+    if (view && !view.webContents.isDestroyed()) action(view);
+}
+
+async function checkUpdatesFromMenu(): Promise<void> {
+    const result = await checkForHooUpdates();
+    const message = result.status === 'updated'
+        ? `Version ${result.message || 'newer'} is available. Download it from the GitHub releases page.`
+        : result.message || 'Hoo Browser is up to date.';
+    if (!mainWindow) return;
+    void dialog.showMessageBox(mainWindow, { type: 'info', title: 'Hoo Browser updates', message, buttons: ['OK'] });
+}
+
+function setupAppMenu(): void {
+    const tabShortcut = (n: number): string => `select-tab-${n}`;
+    const tabItems: Electron.MenuItemConstructorOptions[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n): Electron.MenuItemConstructorOptions => ({
+        label: `Switch to tab ${n}`,
+        accelerator: `CmdOrCtrl+${n}`,
+        click: (): void => sendUiShortcut(tabShortcut(n))
+    }));
+
+    const template: Electron.MenuItemConstructorOptions[] = [
+        {
+            label: 'File',
+            submenu: [
+                { label: 'New Tab', accelerator: 'CmdOrCtrl+T', click: (): void => sendUiShortcut('new-tab') },
+                { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: (): void => sendUiShortcut('close-tab') },
+                { label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T', click: (): void => sendUiShortcut('reopen-closed') },
+                { type: 'separator' },
+                { label: 'Downloads', accelerator: 'CmdOrCtrl+J', click: (): void => sendUiShortcut('downloads') },
+                { label: 'Find in Page', accelerator: 'CmdOrCtrl+F', click: (): void => sendUiShortcut('find') },
+                { label: 'Focus Address Bar', accelerator: 'CmdOrCtrl+L', click: (): void => sendUiShortcut('focus-address') },
+                { type: 'separator' },
+                { label: 'Settings', accelerator: 'CmdOrCtrl+,', click: (): void => sendUiShortcut('settings') },
+                { label: 'Close Window', role: 'close' },
+                { label: 'Quit', role: 'quit' }
+            ]
+        },
+        {
+            label: 'Edit',
+            submenu: [
+                { role: 'undo' },
+                { role: 'redo' },
+                { type: 'separator' },
+                { role: 'cut' },
+                { role: 'copy' },
+                { role: 'paste' },
+                { role: 'selectAll' }
+            ]
+        },
+        {
+            label: 'View',
+            submenu: [
+                { label: 'Reload Page', accelerator: 'CmdOrCtrl+R', click: (): void => { if (activeTabId) void browserViews.get(activeTabId)?.webContents.reload(); } },
+                { label: 'Force Reload', accelerator: 'CmdOrCtrl+Shift+R', click: (): void => runViewAction((view): void => view.webContents.reloadIgnoringCache()) },
+                { type: 'separator' },
+                { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: (): void => applyZoomToActiveView('in') },
+                { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: (): void => applyZoomToActiveView('out') },
+                { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: (): void => applyZoomToActiveView('reset') },
+                { type: 'separator' },
+                { role: 'togglefullscreen' },
+                { type: 'separator' },
+                { label: 'Developer Tools', accelerator: 'CmdOrCtrl+Shift+I', click: (): void => runViewAction((view): void => view.webContents.openDevTools({ mode: 'detach' })) },
+                { label: 'Developer Tools (F12)', accelerator: 'F12', click: (): void => runViewAction((view): void => view.webContents.openDevTools({ mode: 'detach' })) },
+                { label: 'Print Page', accelerator: 'CmdOrCtrl+P', click: (): void => runViewAction((view): void => view.webContents.print()) }
+            ]
+        },
+        {
+            label: 'History',
+            submenu: [
+                { label: 'Back', accelerator: 'Alt+Left', click: (): void => runViewAction((view): void => view.webContents.navigationHistory.goBack()) },
+                { label: 'Forward', accelerator: 'Alt+Right', click: (): void => runViewAction((view): void => view.webContents.navigationHistory.goForward()) }
+            ]
+        },
+        {
+            label: 'Tabs',
+            submenu: [
+                { label: 'Next Tab', accelerator: 'Control+Tab', click: (): void => sendUiShortcut('next-tab') },
+                { label: 'Previous Tab', accelerator: 'Control+Shift+Tab', click: (): void => sendUiShortcut('prev-tab') },
+                { type: 'separator' },
+                ...tabItems,
+                { label: 'Switch to last tab', accelerator: 'CmdOrCtrl+9', click: (): void => sendUiShortcut('select-tab-9') }
+            ]
+        },
+        {
+            label: 'Help',
+            submenu: [
+                { label: 'Check for Updates...', click: (): void => { void checkUpdatesFromMenu(); } }
+            ]
+        }
+    ];
+
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 app.whenReady().then(createWindow);
 app.on("window-all-closed", (): void => { if (process.platform !== "darwin") app.quit(); });

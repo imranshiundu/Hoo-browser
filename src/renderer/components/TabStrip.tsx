@@ -1,7 +1,7 @@
 import React from 'react';
 import './TabStrip.css';
-import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw, BookmarkPlus, History, Layers, Trash2 } from 'lucide-react';
-import { Tab, getFaviconUrl } from '../types';
+import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw, BookmarkPlus, History, Layers, Trash2, Volume2, VolumeX, Home } from 'lucide-react';
+import { Tab, siteInitial, siteInitialStyle } from '../types';
 
 interface TabStripProps {
     tabs: Tab[];
@@ -9,10 +9,15 @@ interface TabStripProps {
     splitTabId: string | null;
     pinnedTabIds?: string[];
     canReopenClosedTab?: boolean;
+    loadingIds?: Record<string, boolean>;
+    favicons?: Record<string, string>;
+    audibleTabs?: Record<string, boolean>;
+    mutedTabs?: Record<string, boolean>;
     onSwitchTab: (id: string) => void;
     onSplitTab: (id: string) => void;
     onCloseTab: (id: string) => void;
     onCreateTab: () => void;
+    onToggleMute?: (id: string) => void;
     onDuplicateTab?: (id: string) => void;
     onCloseOtherTabs?: (id: string) => void;
     onCloseTabsToRight?: (id: string) => void;
@@ -37,10 +42,15 @@ const TabStrip: React.FC<TabStripProps> = ({
     splitTabId,
     pinnedTabIds = [],
     canReopenClosedTab = false,
+    loadingIds = {},
+    favicons = {},
+    audibleTabs = {},
+    mutedTabs = {},
     onSwitchTab,
     onSplitTab,
     onCloseTab,
     onCreateTab,
+    onToggleMute,
     onDuplicateTab,
     onCloseOtherTabs,
     onCloseTabsToRight,
@@ -191,18 +201,44 @@ const TabStrip: React.FC<TabStripProps> = ({
 
     const contextTab = contextMenu ? tabs.find(tab => tab.id === contextMenu.tabId) : null;
     const contextPinned = contextTab ? pinnedTabIds.includes(contextTab.id) : false;
-    const contextIndex = contextTab ? tabs.findIndex(tab => tab.id === contextTab.id) : -1;
+    const contextIndex = contextTab ? tabs.findIndex(tab => tab.id === contextMenu.tabId) : -1;
     const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(tab => !pinnedTabIds.includes(tab.id));
     const browserUrls = tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean);
     const hasDuplicateTabs = new Set(browserUrls).size < browserUrls.length;
     const contextPosition = contextMenu ? clampMenuPosition(contextMenu.x, contextMenu.y) : null;
     const newTabPosition = newTabMenu ? clampMenuPosition(newTabMenu.x, newTabMenu.y, MENU_WIDTH, 260) : null;
 
+    const renderTabIcon = (tab: Tab): React.ReactNode => {
+        if (loadingIds[tab.id]) return <span className="tab-spinner" aria-label="Loading" />;
+        if (tab.type === 'home') return <Home size={15} className="tab-favicon" />;
+        const favicon = favicons[tab.id];
+        if (favicon) return <img className="tab-favicon-img" src={favicon} alt="" draggable={false} />;
+        const initial = siteInitial(tab.url);
+        if (initial) {
+            return <span className="tab-favicon-initial" style={siteInitialStyle(initial)}>{initial.letter}</span>;
+        }
+        return <Globe size={15} className="tab-favicon" />;
+    };
+
+    const renderAudioIndicator = (tab: Tab): React.ReactNode => {
+        if (!audibleTabs[tab.id] && !mutedTabs[tab.id]) return null;
+        const muted = mutedTabs[tab.id];
+        return (
+            <button
+                className={`tab-action-btn audio-btn ${muted ? 'muted' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onToggleMute?.(tab.id); }}
+                onDoubleClick={(e) => e.stopPropagation()}
+                title={muted ? 'Unmute tab' : 'Mute tab'}
+            >
+                {muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+            </button>
+        );
+    };
+
     return (
         <div className="tab-strip">
             <div className="tabs-container" ref={containerRef} onWheel={handleWheel}>
                 {orderedTabs.map(tab => {
-                    const faviconUrl = getFaviconUrl(tab.url);
                     const isActive = tab.id === activeTabId;
                     const isPinned = pinnedTabIds.includes(tab.id);
                     const canClose = !isPinned && (tabs.length > 1 || tab.type === 'browser');
@@ -210,7 +246,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                         <div
                             key={tab.id}
                             ref={isActive ? activeTabRef : undefined}
-                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''}`}
+                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''} ${loadingIds[tab.id] ? 'loading' : ''}`}
                             onClick={() => onSwitchTab(tab.id)}
                             onDoubleClick={(e) => startEditing(e, tab)}
                             onContextMenu={(e) => void openContextMenu(e, tab.id)}
@@ -223,7 +259,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                             title={tab.title}
                         >
                             {isPinned && <Pin size={10} className="pin-indicator" />}
-                            {faviconUrl ? <img className="tab-favicon-img" src={faviconUrl} alt="" draggable={false} /> : <Globe size={15} className="tab-favicon" />}
+                            {renderTabIcon(tab)}
                             {editingId === tab.id ? (
                                 <input
                                     className="tab-rename-input"
@@ -239,6 +275,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                                 />
                             ) : !isPinned && <span className="tab-title">{tab.title || 'New Tab'}</span>}
                             <div className="tab-actions">
+                                {renderAudioIndicator(tab)}
                                 {tab.type === 'browser' && tab.id !== activeTabId && tab.id !== splitTabId && !isPinned && (
                                     <button className="tab-action-btn split-btn" onClick={(e) => { e.stopPropagation(); onSplitTab(tab.id); }} title="Open in Split View"><Columns size={12} /></button>
                                 )}
@@ -248,7 +285,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                     );
                 })}
             </div>
-            <button className="new-tab-btn" onClick={onCreateTab} onContextMenu={(e) => void openNewTabMenu(e)} title="New tab">
+            <button className="new-tab-btn" onClick={onCreateTab} onContextMenu={(e) => void openNewTabMenu(e)} title="New tab (Ctrl+T)">
                 <Plus size={17} />
             </button>
 

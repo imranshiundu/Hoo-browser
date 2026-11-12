@@ -3,10 +3,15 @@ import './Browser.css';
 import { Tab } from '../types';
 import NavigationBar from '../components/NavigationBar';
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { findStatusText } from '../../main/tab-utils';
 
 interface BrowserProps {
     tabs: Tab[];
     activeTabId: string;
+    loading?: boolean;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    zoomBadge?: { percent: number; at: number } | null;
     onSwitchTab: (id: string) => void;
     onCloseTab: (id: string) => void;
     onCreateTab: () => void;
@@ -14,7 +19,15 @@ interface BrowserProps {
     onOpenSettings?: () => void;
 }
 
-const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) => {
+const Browser: React.FC<BrowserProps> = ({
+    tabs,
+    activeTabId,
+    loading = false,
+    canGoBack = true,
+    canGoForward = true,
+    zoomBadge = null,
+    onOpenSettings
+}) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const findInputRef = React.useRef<HTMLInputElement>(null);
     const activeTab = tabs.find(t => t.id === activeTabId);
@@ -22,10 +35,28 @@ const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) 
     const [findOpen, setFindOpen] = React.useState(false);
     const [findQuery, setFindQuery] = React.useState('');
     const [findStatus, setFindStatus] = React.useState('');
+    const [targetUrl, setTargetUrl] = React.useState('');
 
     React.useEffect(() => {
         if (!tabs.some(tab => tab.id === splitTabId)) setSplitTabId(null);
     }, [tabs, splitTabId]);
+
+    React.useEffect(() => {
+        setTargetUrl('');
+    }, [activeTabId]);
+
+    React.useEffect(() => {
+        if (!window.electronAPI?.onPageTargetUrl) return;
+        window.electronAPI.onPageTargetUrl((url) => setTargetUrl(url || ''));
+    }, []);
+
+    React.useEffect(() => {
+        if (!window.electronAPI?.onFindResult) return;
+        window.electronAPI.onFindResult((tabId, activeMatch, matches) => {
+            if (tabId !== activeTabId) return;
+            setFindStatus(findStatusText(activeMatch, matches, true));
+        });
+    }, [activeTabId]);
 
     React.useEffect(() => {
         if (!containerRef.current || !window.electronAPI?.updateViewBounds || !activeTab) return;
@@ -57,20 +88,28 @@ const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) 
     }, [activeTabId, activeTab?.url, splitTabId, findOpen]);
 
     React.useEffect(() => {
+        const closeFind = (): void => {
+            setFindOpen(false);
+            setFindQuery('');
+            setFindStatus('');
+            void window.electronAPI?.stopFindInPage?.(activeTabId);
+        };
         const handleFindShortcut = (event: KeyboardEvent): void => {
-            const mod = event.ctrlKey || event.metaKey;
-            if (mod && event.key.toLowerCase() === 'f') {
-                event.preventDefault();
-                setFindOpen(true);
-                requestAnimationFrame(() => findInputRef.current?.focus());
-            }
             if (event.key === 'Escape' && findOpen) {
                 event.preventDefault();
                 closeFind();
             }
         };
+        const openFind = (): void => {
+            setFindOpen(true);
+            requestAnimationFrame(() => findInputRef.current?.focus());
+        };
         window.addEventListener('keydown', handleFindShortcut);
-        return () => window.removeEventListener('keydown', handleFindShortcut);
+        document.addEventListener('hoo-open-find', openFind);
+        return () => {
+            window.removeEventListener('keydown', handleFindShortcut);
+            document.removeEventListener('hoo-open-find', openFind);
+        };
     }, [findOpen, activeTabId]);
 
     const runFind = (query: string, forward = true): void => {
@@ -100,6 +139,7 @@ const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) 
     const handleBack = () => window.electronAPI?.goBack(activeTabId);
     const handleForward = () => window.electronAPI?.goForward(activeTabId);
     const handleReload = () => window.electronAPI?.reload(activeTabId);
+    const handleStop = () => window.electronAPI?.stopLoading?.(activeTabId);
     const handleSplitWithTab = (nextSplitTabId: string) => {
         setSplitTabId(nextSplitTabId);
         void window.electronAPI?.setMosaicView?.(activeTabId, nextSplitTabId);
@@ -116,14 +156,20 @@ const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) 
                 url={activeTab?.url || ''}
                 tabs={tabs}
                 splitTabId={splitTabId}
+                loading={loading}
+                canGoBack={canGoBack}
+                canGoForward={canGoForward}
+                zoomBadge={zoomBadge}
                 onNavigate={handleNavigate}
                 onBack={handleBack}
                 onForward={handleForward}
                 onReload={handleReload}
+                onStop={handleStop}
                 onSplitWithTab={handleSplitWithTab}
                 onClearSplit={handleClearSplit}
                 onOpenSettings={onOpenSettings}
             />
+            {loading && <div className="page-progress-bar" aria-hidden="true"><div className="page-progress-fill" /></div>}
             {findOpen && (
                 <div className="find-in-page-bar">
                     <Search size={15} />
@@ -147,6 +193,9 @@ const Browser: React.FC<BrowserProps> = ({ tabs, activeTabId, onOpenSettings }) 
             <section className="browser-view-container" id="browser-content" ref={containerRef}>
                 {splitTabId && <div className="split-screen-gutter" aria-hidden="true" />}
             </section>
+            {targetUrl && (
+                <div className="link-hover-preview" aria-hidden="true">{targetUrl}</div>
+            )}
         </main>
     );
 };

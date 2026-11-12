@@ -112,3 +112,46 @@
 .empty-state p {
     display: none;
 }
+
+/* Indeterminate page progress bar under the navigation bar */
+.page-progress-bar {
+    height: 2px;
+    flex: 0 0 2px;
+    overflow: hidden;
+    background: rgba(255, 106, 0, 0.12);
+    position: relative;
+    z-index: 5;
+}
+
+.page-progress-fill {
+    height: 100%;
+    width: 34%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255, 106, 0, 0.15), #ff6a00, rgba(255, 106, 0, 0.15));
+    animation: page-progress-slide 1s ease-in-out infinite;
+}
+
+@keyframes page-progress-slide {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(320%); }
+}
+
+/* Hovered-link URL preview, bottom-left of the page area */
+.link-hover-preview {
+    position: absolute;
+    left: 10px;
+    bottom: 8px;
+    max-width: min(620px, calc(100% - 24px));
+    padding: 5px 10px;
+    border-radius: 8px;
+    background: rgba(12, 12, 12, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 11.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    z-index: 900;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+}

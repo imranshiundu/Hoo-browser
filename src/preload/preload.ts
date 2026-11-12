@@ -13,7 +13,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     goBack: (tabId: string) => ipcRenderer.invoke('go-back', tabId),
     goForward: (tabId: string) => ipcRenderer.invoke('go-forward', tabId),
     reload: (tabId: string) => ipcRenderer.invoke('reload', tabId),
+    stopLoading: (tabId: string) => ipcRenderer.invoke('stop-loading', tabId),
     navigateTo: (url: string) => ipcRenderer.invoke('navigate-to', url),
+    findInPage: (tabId: string, query: string, options?: { forward?: boolean; findNext?: boolean }) => ipcRenderer.invoke('find-in-page', tabId, query, options),
+    stopFindInPage: (tabId: string) => ipcRenderer.invoke('stop-find-in-page', tabId),
+    toggleTabMute: (tabId: string) => ipcRenderer.invoke('toggle-tab-mute', tabId),
+    getDownloads: () => ipcRenderer.invoke('get-downloads'),
+    openDownload: (id: string) => ipcRenderer.invoke('open-download', id),
+    showDownloadInFolder: (id: string) => ipcRenderer.invoke('show-download-in-folder', id),
+    clearDownloads: () => ipcRenderer.invoke('clear-downloads'),
+    getHistory: () => ipcRenderer.invoke('get-history'),
     updatePrivacySettings: (settings: any) => ipcRenderer.invoke('update-privacy-settings', settings),
     getInitialData: () => ipcRenderer.invoke('get-initial-data'),
     getSystemMetrics: () => ipcRenderer.invoke('get-system-metrics'),
@@ -41,6 +50,36 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
     onSwitchToHome: (callback: (tabId?: string) => void) => {
         ipcRenderer.on('switch-to-home', (_event, tabId) => callback(tabId));
+    },
+    onOpenUrlInNewTab: (callback: (url: string) => void) => {
+        ipcRenderer.on('open-url-in-new-tab', (_event, url) => callback(url));
+    },
+    onUiShortcut: (callback: (action: string) => void) => {
+        ipcRenderer.on('ui-shortcut', (_event, action) => callback(action));
+    },
+    onNavStateUpdated: (callback: (tabId: string, canGoBack: boolean, canGoForward: boolean) => void) => {
+        ipcRenderer.on('nav-state-updated', (_event, tabId, canGoBack, canGoForward) => callback(tabId, canGoBack, canGoForward));
+    },
+    onTabFaviconUpdated: (callback: (tabId: string, favicon: string) => void) => {
+        ipcRenderer.on('tab-favicon-updated', (_event, tabId, favicon) => callback(tabId, favicon));
+    },
+    onTabAudioUpdated: (callback: (tabId: string, audible: boolean, muted: boolean) => void) => {
+        ipcRenderer.on('tab-audio-updated', (_event, tabId, audible, muted) => callback(tabId, audible, muted));
+    },
+    onPageTargetUrl: (callback: (url: string) => void) => {
+        ipcRenderer.on('page-target-url', (_event, url) => callback(url));
+    },
+    onFindResult: (callback: (tabId: string, activeMatch: number, matches: number) => void) => {
+        ipcRenderer.on('find-result', (_event, tabId, activeMatch, matches) => callback(tabId, activeMatch, matches));
+    },
+    onDownloadUpdated: (callback: (record: any) => void) => {
+        ipcRenderer.on('download-updated', (_event, record) => callback(record));
+    },
+    onDownloadListCleared: (callback: () => void) => {
+        ipcRenderer.on('download-list-cleared', () => callback());
+    },
+    onZoomChanged: (callback: (tabId: string, percent: number) => void) => {
+        ipcRenderer.on('zoom-changed', (_event, tabId, percent) => callback(tabId, percent));
     },
     googleLogin: () => ipcRenderer.invoke('google-login'),
     googleLogout: () => ipcRenderer.invoke('google-logout'),

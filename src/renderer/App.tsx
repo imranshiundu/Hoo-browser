@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './styles/globals.css';
 import SettingsModal from './components/SettingsModal';
 import TitleBar from './components/TitleBar';
@@ -25,6 +25,15 @@ const App: React.FC = () => {
         catch { return []; }
     });
 
+    // Runtime state mirrored from the main process: which tabs are loading,
+    // their real favicons, audio indicators and back/forward availability.
+    const [loadingIds, setLoadingIds] = useState<Record<string, boolean>>({});
+    const [favicons, setFavicons] = useState<Record<string, string>>({});
+    const [audibleMap, setAudibleMap] = useState<Record<string, boolean>>({});
+    const [mutedMap, setMutedMap] = useState<Record<string, boolean>>({});
+    const [navState, setNavState] = useState<Record<string, { canGoBack: boolean; canGoForward: boolean }>>({});
+    const [zoomBadge, setZoomBadge] = useState<{ percent: number; at: number } | null>(null);
+
     const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || initialHomeTab;
 
     useEffect(() => {
@@ -48,7 +57,7 @@ const App: React.FC = () => {
         const loadInitialData = async (): Promise<void> => {
             if (!window.electronAPI?.getInitialData) return;
             const data: { tabs: Tab[], activeTabId?: string | null } = await window.electronAPI.getInitialData();
-            const browserTabs = (data.tabs || []).filter(t => t.type === 'browser');
+            const browserTabs = (data.tabs || []).filter(t => t.type === 'browser' && t.url !== 'about:blank');
             const restoredActive = data.activeTabId && browserTabs.some(t => t.id === data.activeTabId)
                 ? data.activeTabId
                 : browserTabs[0]?.id;
@@ -194,47 +203,123 @@ const App: React.FC = () => {
         setPinnedTabIds(prev => prev.includes(tabId) ? prev.filter(id => id !== tabId) : [...prev, tabId]);
     };
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent): void => {
-            const key = e.key.toLowerCase();
-            const mod = e.ctrlKey || e.metaKey;
-            if (mod && key === 'l') {
-                e.preventDefault();
-                document.dispatchEvent(new CustomEvent('hoo-focus-address'));
-            }
-            if (mod && key === 't') {
-                e.preventDefault();
-                openHomeTab();
-            }
-            if (mod && key === 'w') {
-                e.preventDefault();
-                void handleCloseTab(activeTabId);
-            }
-            if (mod && key === 'd') {
-                e.preventDefault();
-                void duplicateTab(activeTabId);
-            }
-            if (mod && e.shiftKey && key === 't') {
-                e.preventDefault();
-                void reopenClosedTab();
-            }
-            if (mod && e.shiftKey && key === 'tab') {
-                e.preventDefault();
-                const index = tabs.findIndex(t => t.id === activeTabId);
-                const next = tabs[(index - 1 + tabs.length) % tabs.length];
-                if (next) void handleSwitchTab(next.id);
-            } else if (mod && key === 'tab') {
-                e.preventDefault();
+    const handleToggleMute = (tabId: string): void => {
+        void window.electronAPI?.toggleTabMute?.(tabId);
+    };
+
+    const handleNavigateFromHome = async (url: string): Promise<void> => {
+        if (!window.electronAPI?.navigateTo) return;
+        // Home tabs are renderer-only views; close their storage records so no
+        // phantom about:blank tabs come back on the next launch.
+        const homeTabs = tabs.filter(t => t.type === 'home');
+        for (const homeTab of homeTabs) void window.electronAPI?.closeTab?.(homeTab.id);
+
+        const tabId = await window.electronAPI.navigateTo(url);
+        if (!tabId) return;
+        setTabs(prev => prev.find(t => t.id === tabId)
+            ? prev.filter(t => t.type !== 'home')
+            : [...prev.filter(t => t.type !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url }]);
+        setActiveTabId(tabId);
+    };
+
+    const handleSplitTab = async (tabId: string): Promise<void> => {
+        if (tabId === activeTabId) return;
+        const active = tabs.find(t => t.id === activeTabId);
+        const target = tabs.find(t => t.id === tabId);
+        if (active?.type !== 'browser' || target?.type !== 'browser') return;
+        if (window.electronAPI?.setMosaicView) {
+            await window.electronAPI.setMosaicView(activeTabId, tabId);
+            setSplitTabId(tabId);
+        }
+    };
+
+    // App-menu shortcuts (Ctrl+T/W/F/J..., Ctrl+Tab, Ctrl+1-9) arrive through
+    // this channel because the shell never sees keystrokes aimed at a page.
+    const shortcutRef = useRef<(action: string) => void>(() => undefined);
+    shortcutRef.current = (action: string): void => {
+        switch (action) {
+            case 'new-tab': openHomeTab(); break;
+            case 'close-tab': void handleCloseTab(activeTabId); break;
+            case 'reopen-closed': void reopenClosedTab(); break;
+            case 'next-tab': {
                 const index = tabs.findIndex(t => t.id === activeTabId);
                 const next = tabs[(index + 1) % tabs.length];
                 if (next) void handleSwitchTab(next.id);
+                break;
             }
-            if (mod && /^[1-9]$/.test(key)) {
-                e.preventDefault();
-                const index = key === '9' ? tabs.length - 1 : Number(key) - 1;
-                const next = tabs[index];
+            case 'prev-tab': {
+                const index = tabs.findIndex(t => t.id === activeTabId);
+                const next = tabs[(index - 1 + tabs.length) % tabs.length];
                 if (next) void handleSwitchTab(next.id);
+                break;
             }
+            case 'select-tab-9': {
+                const next = tabs[tabs.length - 1];
+                if (next) void handleSwitchTab(next.id);
+                break;
+            }
+            default: {
+                const selectMatch = /^select-tab-([1-8])$/.exec(action);
+                if (selectMatch) {
+                    const next = tabs[Number(selectMatch[1]) - 1];
+                    if (next) void handleSwitchTab(next.id);
+                } else if (action === 'find') {
+                    document.dispatchEvent(new CustomEvent('hoo-open-find'));
+                } else if (action === 'focus-address') {
+                    document.dispatchEvent(new CustomEvent('hoo-focus-address'));
+                } else if (action === 'downloads') {
+                    document.dispatchEvent(new CustomEvent('hoo-open-downloads'));
+                } else if (action === 'history') {
+                    document.dispatchEvent(new CustomEvent('hoo-open-history'));
+                } else if (action === 'settings') {
+                    setSettingsOpen(true);
+                }
+            }
+        }
+    };
+
+    const openFromPageRef = useRef<(url: string) => void>(() => undefined);
+    openFromPageRef.current = (url: string): void => {
+        void (async (): Promise<void> => {
+            const tabId = await window.electronAPI?.navigateTo?.(url);
+            if (!tabId) return;
+            setTabs(prev => prev.some(t => t.id === tabId)
+                ? prev
+                : [...prev, { id: tabId, type: 'browser', title: 'Loading...', url }]);
+            setActiveTabId(tabId);
+        })();
+    };
+
+    useEffect(() => {
+        window.electronAPI?.onUiShortcut?.((action) => shortcutRef.current(action));
+        window.electronAPI?.onOpenUrlInNewTab?.((url) => openFromPageRef.current(url));
+        window.electronAPI?.onTabLoadingState?.((tabId, loading) => {
+            setLoadingIds(prev => {
+                const next = { ...prev };
+                if (loading) next[tabId] = true;
+                else delete next[tabId];
+                return next;
+            });
+        });
+        window.electronAPI?.onTabFaviconUpdated?.((tabId, favicon) => {
+            setFavicons(prev => ({ ...prev, [tabId]: favicon }));
+        });
+        window.electronAPI?.onTabAudioUpdated?.((tabId, audible, muted) => {
+            setAudibleMap(prev => ({ ...prev, [tabId]: audible }));
+            setMutedMap(prev => ({ ...prev, [tabId]: muted }));
+        });
+        window.electronAPI?.onNavStateUpdated?.((tabId, canGoBack, canGoForward) => {
+            setNavState(prev => ({ ...prev, [tabId]: { canGoBack, canGoForward } }));
+        });
+        window.electronAPI?.onZoomChanged?.((tabId, percent) => {
+            if (tabId === activeTabId) setZoomBadge({ percent, at: Date.now() });
+        });
+    }, []);
+
+    // Only Escape remains as a shell-level key handler; every other browser
+    // shortcut is an app-menu accelerator so it also works inside pages.
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent): void => {
             if (e.key === 'Escape' && settingsOpen) {
                 e.preventDefault();
                 setSettingsOpen(false);
@@ -242,7 +327,7 @@ const App: React.FC = () => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [settingsOpen, tabs, activeTabId, splitTabId, pinnedTabIds, closedTabs]);
+    }, [settingsOpen]);
 
     useEffect(() => {
         if (settingsOpen) {
@@ -271,28 +356,9 @@ const App: React.FC = () => {
         });
     }, []);
 
-    const handleNavigateFromHome = async (url: string): Promise<void> => {
-        if (!window.electronAPI?.navigateTo) return;
-        const tabId = await window.electronAPI.navigateTo(url);
-        if (!tabId) return;
-        setTabs(prev => prev.find(t => t.id === tabId)
-            ? prev.filter(t => t.type !== 'home')
-            : [...prev.filter(t => t.type !== 'home'), { id: tabId, type: 'browser', title: 'Loading...', url }]);
-        setActiveTabId(tabId);
-    };
-
-    const handleSplitTab = async (tabId: string): Promise<void> => {
-        if (tabId === activeTabId) return;
-        const active = tabs.find(t => t.id === activeTabId);
-        const target = tabs.find(t => t.id === tabId);
-        if (active?.type !== 'browser' || target?.type !== 'browser') return;
-        if (window.electronAPI?.setMosaicView) {
-            await window.electronAPI.setMosaicView(activeTabId, tabId);
-            setSplitTabId(tabId);
-        }
-    };
-
     const browserTabs = tabs.filter(t => t.type === 'browser');
+    const activeLoading = !!loadingIds[activeTabId];
+    const activeNavState = navState[activeTabId] || { canGoBack: true, canGoForward: true };
 
     return (
         <div className="app-shell">
@@ -304,10 +370,15 @@ const App: React.FC = () => {
                     splitTabId={splitTabId}
                     pinnedTabIds={pinnedTabIds}
                     canReopenClosedTab={closedTabs.length > 0}
+                    loadingIds={loadingIds}
+                    favicons={favicons}
+                    audibleTabs={audibleMap}
+                    mutedTabs={mutedMap}
                     onSwitchTab={(id): void => { void handleSwitchTab(id); }}
                     onSplitTab={(id): void => { void handleSplitTab(id); }}
                     onCloseTab={(id): void => { void handleCloseTab(id); }}
                     onCreateTab={openHomeTab}
+                    onToggleMute={handleToggleMute}
                     onDuplicateTab={(id): void => { void duplicateTab(id); }}
                     onCloseOtherTabs={(id): void => { void closeOtherTabs(id); }}
                     onCloseTabsToRight={(id): void => { void closeTabsToRight(id); }}
@@ -321,6 +392,10 @@ const App: React.FC = () => {
                         <Browser
                             tabs={browserTabs}
                             activeTabId={activeTabId}
+                            loading={activeLoading}
+                            canGoBack={activeNavState.canGoBack}
+                            canGoForward={activeNavState.canGoForward}
+                            zoomBadge={zoomBadge}
                             onSwitchTab={handleSwitchTab}
                             onCloseTab={handleCloseTab}
                             onCreateTab={openHomeTab}

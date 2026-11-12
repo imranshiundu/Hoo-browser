@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './Home.css';
 import { Check, Image, Search, Settings, BookmarkPlus } from 'lucide-react';
-import { getFaviconUrl } from '../types';
+import { siteInitial, siteInitialStyle } from '../types';
 import { getWallpaperById, HOO_WALLPAPERS, HOO_WALLPAPER_STORAGE_KEY } from '../assets/wallpapers';
 
 const hooIcon = require('../assets/branding/hoo-app-icon.svg');
@@ -145,10 +145,10 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
 
                 <div className="speed-dial" aria-label="Quick links">
                     {speedDialLinks.map((link) => {
-                        const favicon = getFaviconUrl(link.url);
+                        const initial = siteInitial(link.url);
                         return (
                             <button key={link.label} onClick={() => handleOpen(link.url)} className="speed-dial-item">
-                                <span className="speed-dial-icon">{favicon ? <img src={favicon} alt="" /> : null}</span>
+                                <span className="speed-dial-icon" style={siteInitialStyle(initial)}>{initial?.letter || '•'}</span>
                                 <span className="speed-dial-label">{link.label}</span>
                             </button>
                         );

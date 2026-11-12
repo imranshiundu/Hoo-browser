@@ -1,33 +1,73 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield, Search, MoreHorizontal, Columns2, PanelRightClose } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Settings, Home, Star, BookOpen, Sparkles, Download, Shield, Search, MoreHorizontal, Columns2, PanelRightClose, History, Clock, FolderOpen, ExternalLink, FileWarning } from 'lucide-react';
 import { Tab } from '../types';
+import { formatBytes } from '../../main/tab-utils';
 
 interface NavigationBarProps {
     tabId: string;
     url: string;
     tabs?: Tab[];
     splitTabId?: string | null;
+    loading?: boolean;
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    zoomBadge?: { percent: number; at: number } | null;
     onNavigate: (url: string) => void;
     onBack: () => void;
     onForward: () => void;
     onReload: () => void;
+    onStop?: () => void;
     onSplitWithTab?: (tabId: string) => void;
     onClearSplit?: () => void;
     onOpenSettings?: () => void;
 }
 
+interface DownloadEntry {
+    id: string;
+    filename: string;
+    url: string;
+    state: 'progressing' | 'completed' | 'cancelled' | 'interrupted';
+    receivedBytes: number;
+    totalBytes: number;
+    danger?: string;
+}
+
+interface HistoryEntry {
+    url: string;
+    title: string;
+    timestamp: number;
+}
+
 const BOOKMARK_KEY = 'hoo:bookmarks';
+
+const stateLabel = (entry: DownloadEntry): string => {
+    if (entry.state === 'progressing') {
+        if (entry.totalBytes > 0) {
+            const percent = Math.min(100, Math.round((entry.receivedBytes / entry.totalBytes) * 100));
+            return `${percent}% of ${formatBytes(entry.totalBytes)}`;
+        }
+        return `${formatBytes(entry.receivedBytes)} downloaded`;
+    }
+    if (entry.state === 'completed') return formatBytes(entry.totalBytes || entry.receivedBytes);
+    if (entry.state === 'interrupted') return 'Interrupted';
+    return 'Cancelled';
+};
 
 const NavigationBar: React.FC<NavigationBarProps> = ({
     tabId,
     url,
     tabs = [],
     splitTabId,
+    loading = false,
+    canGoBack = true,
+    canGoForward = true,
+    zoomBadge = null,
     onNavigate,
     onBack,
     onForward,
     onReload,
+    onStop,
     onSplitWithTab,
     onClearSplit,
     onOpenSettings
@@ -36,7 +76,12 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const [bookmarksOpen, setBookmarksOpen] = useState(false);
     const [toolsOpen, setToolsOpen] = useState(false);
     const [splitOpen, setSplitOpen] = useState(false);
+    const [downloadsOpen, setDownloadsOpen] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false);
     const [bookmarks, setBookmarks] = useState<Array<{ id: string; title: string; url: string }>>([]);
+    const [downloads, setDownloads] = useState<DownloadEntry[]>([]);
+    const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [zoomVisible, setZoomVisible] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => setInputValue(url), [url]);
@@ -51,8 +96,49 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
 
     useEffect(() => loadBookmarks(), []);
 
+    const refreshDownloads = async (): Promise<void> => {
+        if (!window.electronAPI?.getDownloads) return;
+        try { setDownloads(await window.electronAPI.getDownloads()); } catch { /* panel still opens with an empty list */ }
+    };
+
+    const refreshHistory = async (): Promise<void> => {
+        if (!window.electronAPI?.getHistory) return;
+        try { setHistory(await window.electronAPI.getHistory()); } catch { /* panel still opens with an empty list */ }
+    };
+
+    // App dispatches these when the app-menu shortcuts (Ctrl+J / history) fire.
     useEffect(() => {
-        const focusAddress = (): void => inputRef.current?.focus();
+        const openDownloads = (): void => { void refreshDownloads(); setHistoryOpen(false); setDownloadsOpen(true); };
+        const openHistory = (): void => { void refreshHistory(); setDownloadsOpen(false); setHistoryOpen(true); };
+        document.addEventListener('hoo-open-downloads', openDownloads);
+        document.addEventListener('hoo-open-history', openHistory);
+        return () => {
+            document.removeEventListener('hoo-open-downloads', openDownloads);
+            document.removeEventListener('hoo-open-history', openHistory);
+        };
+    }, []);
+
+    // Live progress while the downloads popover is open.
+    useEffect(() => {
+        if (!window.electronAPI?.onDownloadUpdated) return;
+        window.electronAPI.onDownloadUpdated((record: DownloadEntry) => {
+            setDownloads(prev => [record, ...prev.filter(item => item.id !== record.id)]);
+        });
+        window.electronAPI.onDownloadListCleared?.(() => setDownloads([]));
+    }, []);
+
+    useEffect(() => {
+        if (!zoomBadge) return;
+        setZoomVisible(true);
+        const timer = window.setTimeout(() => setZoomVisible(false), 1600);
+        return () => window.clearTimeout(timer);
+    }, [zoomBadge]);
+
+    useEffect(() => {
+        const focusAddress = (): void => {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        };
         document.addEventListener('hoo-focus-address', focusAddress);
         return () => document.removeEventListener('hoo-focus-address', focusAddress);
     }, []);
@@ -63,6 +149,8 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             if (!target?.closest('.nav-menu-wrap')) setBookmarksOpen(false);
             if (!target?.closest('.tools-menu-wrap')) setToolsOpen(false);
             if (!target?.closest('.split-menu-wrap')) setSplitOpen(false);
+            if (!target?.closest('.downloads-menu-wrap')) setDownloadsOpen(false);
+            if (!target?.closest('.history-menu-wrap')) setHistoryOpen(false);
         };
         document.addEventListener('mousedown', closePopovers);
         return () => document.removeEventListener('mousedown', closePopovers);
@@ -121,12 +209,29 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const isSecure = url.startsWith('https://');
     const isExternal = /^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(url || inputValue);
 
+    const handleOpenDownload = (entry: DownloadEntry): void => {
+        void window.electronAPI?.openDownload?.(entry.id);
+    };
+
+    const handleShowDownload = (entry: DownloadEntry): void => {
+        void window.electronAPI?.showDownloadInFolder?.(entry.id);
+    };
+
+    const handleClearDownloads = (): void => {
+        void window.electronAPI?.clearDownloads?.();
+        setDownloads([]);
+    };
+
     return (
         <div className="navigation-bar">
             <div className="nav-cluster nav-history-cluster" aria-label="Navigation controls">
-                <button className="nav-btn" onClick={onBack} title="Back"><ArrowLeft size={17} /></button>
-                <button className="nav-btn" onClick={onForward} title="Forward"><ArrowRight size={17} /></button>
-                <button className="nav-btn" onClick={onReload} title="Reload"><RotateCw size={16} /></button>
+                <button className="nav-btn" onClick={onBack} disabled={!canGoBack} title="Back (Alt+←)"><ArrowLeft size={17} /></button>
+                <button className="nav-btn" onClick={onForward} disabled={!canGoForward} title="Forward (Alt+→)"><ArrowRight size={17} /></button>
+                {loading ? (
+                    <button className="nav-btn stop-btn" onClick={onStop} title="Stop loading"><X size={17} /></button>
+                ) : (
+                    <button className="nav-btn" onClick={onReload} title="Reload (Ctrl+R)"><RotateCw size={16} /></button>
+                )}
                 <button className="nav-btn" onClick={() => onNavigate('about:blank')} title="Home"><Home size={16} /></button>
             </div>
 
@@ -151,6 +256,9 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                     placeholder="Search or enter address"
                     spellCheck={false}
                 />
+                {zoomVisible && zoomBadge && zoomBadge.percent !== 100 && (
+                    <span className="zoom-badge" title="Page zoom (Ctrl+0 resets)">{zoomBadge.percent}%</span>
+                )}
             </form>
 
             <div className="nav-cluster nav-actions-cluster" aria-label="Page actions">
@@ -162,6 +270,8 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                             else setSplitOpen(v => !v);
                             setBookmarksOpen(false);
                             setToolsOpen(false);
+                            setDownloadsOpen(false);
+                            setHistoryOpen(false);
                         }}
                         title={splitTabId ? 'Exit split screen' : 'Split screen'}
                     >
@@ -183,7 +293,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                 </div>
                 <button className="nav-btn" onClick={bookmarkCurrent} title="Bookmark page"><Star size={16} /></button>
                 <div className="nav-menu-wrap">
-                    <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); setToolsOpen(false); setSplitOpen(false); }} title="Bookmarks"><BookOpen size={16} /></button>
+                    <button className="nav-btn" onClick={() => { loadBookmarks(); setBookmarksOpen(v => !v); setToolsOpen(false); setSplitOpen(false); setDownloadsOpen(false); setHistoryOpen(false); }} title="Bookmarks"><BookOpen size={16} /></button>
                     {bookmarksOpen && (
                         <div className="bookmarks-popover">
                             <strong>Bookmarks</strong>
@@ -196,23 +306,82 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                         </div>
                     )}
                 </div>
+                <div className="downloads-menu-wrap">
+                    <button
+                        className={`nav-btn ${downloads.length > 0 && downloads.some(d => d.state === 'progressing') ? 'busy' : ''}`}
+                        onClick={() => { void refreshDownloads(); setDownloadsOpen(v => !v); setHistoryOpen(false); setBookmarksOpen(false); setToolsOpen(false); setSplitOpen(false); }}
+                        title="Downloads (Ctrl+J)"
+                    >
+                        <Download size={16} />
+                    </button>
+                    {downloadsOpen && (
+                        <div className="downloads-popover">
+                            <header>
+                                <strong>Downloads</strong>
+                                {downloads.length > 0 && <button onClick={handleClearDownloads}>Clear list</button>}
+                            </header>
+                            {downloads.length === 0 ? (
+                                <span className="empty-panel">Files you download will show up here.</span>
+                            ) : downloads.map(entry => (
+                                <div key={entry.id} className={`download-row ${entry.state}`}>
+                                    <span className="download-name" title={entry.filename}>{entry.filename}</span>
+                                    <span className="download-meta">{stateLabel(entry)}</span>
+                                    {entry.danger && <span className="download-danger"><FileWarning size={12} /> {entry.danger}</span>}
+                                    <div className="download-actions">
+                                        {entry.state === 'completed' && (
+                                            <button onClick={() => handleOpenDownload(entry)} title="Open file"><ExternalLink size={13} /> Open</button>
+                                        )}
+                                        <button onClick={() => handleShowDownload(entry)} title="Show in folder"><FolderOpen size={13} /> Folder</button>
+                                    </div>
+                                    {entry.state === 'progressing' && (
+                                        <div className="download-progress">
+                                            <div className="download-progress-fill" style={{ width: entry.totalBytes > 0 ? `${Math.min(100, (entry.receivedBytes / entry.totalBytes) * 100)}%` : '12%' }} />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="history-menu-wrap">
+                    <button
+                        className="nav-btn"
+                        onClick={() => { void refreshHistory(); setHistoryOpen(v => !v); setDownloadsOpen(false); setBookmarksOpen(false); setToolsOpen(false); setSplitOpen(false); }}
+                        title="Recent history"
+                    >
+                        <Clock size={16} />
+                    </button>
+                    {historyOpen && (
+                        <div className="history-popover">
+                            <header><strong>Recent history</strong><small>Cleared automatically per your retention setting</small></header>
+                            {history.length === 0 ? (
+                                <span className="empty-panel">Pages you visit will show up here.</span>
+                            ) : history.map((entry, index) => (
+                                <button key={`${entry.timestamp}-${index}`} className="history-row" onClick={() => { setHistoryOpen(false); onNavigate(entry.url); }}>
+                                    <span className="history-title">{entry.title || entry.url}</span>
+                                    <small className="history-url">{entry.url}</small>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 <button className="nav-btn shield-on" title="Hoo Shields active"><Shield size={16} /></button>
             </div>
 
             <div className="nav-cluster nav-tools-cluster" aria-label="Tools">
                 <button className="nav-btn optional-tool" onClick={() => onNavigate('https://duck.ai/')} title="Duck.ai"><Sparkles size={16} /></button>
-                <button className="nav-btn optional-tool" title="Downloads"><Download size={16} /></button>
                 <div className="tools-menu-wrap">
-                    <button className="nav-btn" onClick={() => { setToolsOpen(v => !v); setBookmarksOpen(false); setSplitOpen(false); }} title="More tools"><MoreHorizontal size={18} /></button>
+                    <button className="nav-btn" onClick={() => { setToolsOpen(v => !v); setBookmarksOpen(false); setSplitOpen(false); setDownloadsOpen(false); setHistoryOpen(false); }} title="More tools"><MoreHorizontal size={18} /></button>
                     {toolsOpen && (
                         <div className="tools-popover">
                             <button onClick={() => { setToolsOpen(false); onNavigate('https://duck.ai/'); }}><Sparkles size={15} /> Duck.ai</button>
-                            <button onClick={() => setToolsOpen(false)}><Download size={15} /> Downloads</button>
+                            <button onClick={() => { setToolsOpen(false); void refreshDownloads(); setDownloadsOpen(true); }}><Download size={15} /> Downloads</button>
+                            <button onClick={() => { setToolsOpen(false); void refreshHistory(); setHistoryOpen(true); }}><History size={15} /> Recent history</button>
                             <button onClick={() => { setToolsOpen(false); onOpenSettings?.(); }}><Settings size={15} /> Settings</button>
                         </div>
                     )}
                 </div>
-                <button className="nav-btn settings-btn" onClick={onOpenSettings} title="Settings"><Settings size={17} /></button>
+                <button className="nav-btn settings-btn" onClick={onOpenSettings} title="Settings (Ctrl+,)"><Settings size={17} /></button>
             </div>
         </div>
     );

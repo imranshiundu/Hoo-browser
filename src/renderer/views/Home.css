@@ -359,3 +359,10 @@
         flex-direction: column;
     }
 }
+
+/* Speed dial letter avatars (no third-party favicon requests) */
+.speed-dial-icon {
+    font-size: 22px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.92);
+}

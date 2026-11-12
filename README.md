@@ -55,13 +55,21 @@ apps never touch:
 
 ## Current status
 
-Version: `v0.2 Hoo Foundation`
+Version: `v0.3 Real Browser Behavior`
 
 The current codebase includes working early versions of:
 
 - Chromium rendering through Electron `BrowserView`
 - tabs with persisted basic state and a documented lifecycle
 - navigation controls and DuckDuckGo-first home search
+- an application menu whose accelerators work **inside web pages**: Ctrl+T/W/N new & close tabs, Ctrl+Tab and Ctrl+1–9 to switch, Ctrl+R / Ctrl+Shift+R reload, Alt+←/→ back/forward, Ctrl+F find, Ctrl+J downloads, Ctrl+0/+=/- zoom, F12 devtools, Ctrl+P print
+- find in page with live match counts ("3 of 17")
+- real favicons captured from pages (no third-party favicon service), with privacy-preserving letter avatars as fallback
+- downloads: tracked, live progress in the toolbar, open file / show in folder, executable danger hints
+- right-click context menu inside web pages (copy, search selection, open link, save image)
+- loading feedback: tab spinners, an indeterminate progress bar, a working stop button, and back/forward buttons that disable themselves
+- audio tab indicators with click-to-mute, link-hover URL preview, window title that follows the page
+- crash handling: a crashed renderer shows a recoverable error page instead of a silent blank rectangle
 - isolated web-app profiles (persistent partitions per app)
 - privacy toggles, bookmarks, RSS reader
 - simple ad/tracker host blocking with compatibility allowlist
@@ -71,7 +79,7 @@ The current codebase includes working early versions of:
 - Linux install/update scripts and cross-platform packaging metadata
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — tests and CI exist, the next milestone is `v0.3 Stable Tabs`.
+The important work now is to make the project stable, testable, installable, and honest — the `v0.3 Stable Tabs` milestone (navigation state, find, downloads, crash handling, app-wide shortcuts) has shipped; the next milestone is `v0.4 Web Apps`.
 
 ## Test suite
 
@@ -96,6 +104,8 @@ Covered modules today:
 | `network-policy.ts` | low-data/lite/extreme/compatibility mode behavior for fonts, media, beacons, prefetch and tracker hosts |
 | `storage.ts` | profile normalization, corrupt-tab filtering, active-tab validation, atomic save/load round-trips |
 | `download-manager.ts` | filename sanitization and executable danger hints |
+| `tab-utils.ts` | collision-free tab ids, zoom clamping/stepping, find-bar status text, crash reason labels, byte formatting |
+| `types.ts` (renderer) | privacy-preserving site-initial avatars used instead of third-party favicon services |
 
 ## Install on Linux
 
@@ -180,20 +190,41 @@ These are tracked honestly instead of hidden:
 
 1. The ad/tracker blocker uses a curated static list, not maintained filter lists.
 2. Random user-agent rotation can make fingerprinting worse if used incorrectly.
-3. Download manager UI is not complete yet.
-4. Permission prompts for camera, microphone, notifications, location, and clipboard need a visible Hoo-controlled UX.
-5. Crash recovery needs further implementation (crash records exist; restore UX does not).
-6. ~~The project has no automated tests yet.~~ Main-process logic is now unit-tested; renderer components are not yet covered.
-7. RSS currently depends on renderer-side fetching patterns that should move to the main process.
-8. Cloud sync needs stronger conflict handling and clearer data boundaries.
-9. IPC actions need tighter validation as the browser grows.
-10. AppImage/deb builds need clean-machine verification.
+3. Permission prompts for camera, microphone, notifications, location, and clipboard need a visible Hoo-controlled UX.
+4. ~~Crash recovery needs further implementation~~ Crashed tabs now show a recoverable error page and are recorded; a one-click "restore all crashed tabs" UX is still missing.
+5. ~~The project has no automated tests yet.~~ Main-process logic and key renderer helpers are unit-tested; full component tests are still missing.
+6. RSS currently depends on renderer-side fetching patterns that should move to the main process.
+7. Cloud sync needs stronger conflict handling and clearer data boundaries.
+8. IPC actions need tighter validation as the browser grows.
+9. AppImage/deb builds need clean-machine verification.
+10. Zoom level is remembered per tab in memory only; per-site zoom persistence is not implemented yet.
+
+## Keyboard map
+
+Every shortcut below is an application-menu accelerator, so it works while a
+web page has focus — not only while the Hoo UI is focused:
+
+| Keys | Action |
+| --- | --- |
+| Ctrl+T / Ctrl+W | new tab / close tab |
+| Ctrl+Shift+T | reopen closed tab |
+| Ctrl+Tab / Ctrl+Shift+Tab | next / previous tab |
+| Ctrl+1…8, Ctrl+9 | switch to tab by position (9 = last) |
+| Ctrl+L focus | address bar (renderer shortcut) |
+| Ctrl+R / Ctrl+Shift+R | reload / force reload |
+| Alt+← / Alt+→ | back / forward |
+| Ctrl+F | find in page (live match counts) |
+| Ctrl+J | downloads panel |
+| Ctrl+= / Ctrl+- / Ctrl+0 | zoom in / out / actual size |
+| F12 / Ctrl+Shift+I | developer tools for the page |
+| Ctrl+P | print page |
+| Ctrl+, | settings |
 
 ## Rebuild path
 
 - `v0.1 Foundation` — honest docs, build scripts, verification, project contract
 - `v0.2 Hoo Foundation` — Hoo identity, installer path, branded home UI, packaging metadata, **test suite + CI**
-- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling ← *next*
+- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling, app-wide shortcuts, find/downloads/favicons wiring ← *current*
 - `v0.4 Web Apps` — isolated app profiles, permissions, reset controls
 - `v0.5 Privacy Controls` — maintained filters, allowlists, visible blocked counts, stable fingerprint profile
 - `v0.6 Local Assistant` — streaming, explicit context, provider settings, local/cloud warnings

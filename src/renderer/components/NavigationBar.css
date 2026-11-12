@@ -224,3 +224,195 @@
     .address-form { min-width: 120px; }
     .address-host-pill { display: none; }
 }
+
+/* Disabled navigation buttons (no back/forward history) */
+.nav-btn:disabled {
+    opacity: 0.32;
+    cursor: default;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-btn:disabled:hover { transform: none; }
+
+.stop-btn { color: #ff6a3d; }
+
+.nav-btn.busy svg { color: #ffb06a; }
+
+/* Zoom badge inside the address bar */
+.zoom-badge {
+    flex: 0 0 auto;
+    font-size: 11px;
+    font-weight: 800;
+    color: #ffb06a;
+    background: rgba(255, 106, 0, 0.14);
+    border: 1px solid rgba(255, 106, 0, 0.3);
+    border-radius: 999px;
+    padding: 2px 8px;
+    animation: zoom-badge-pop 160ms ease;
+}
+
+@keyframes zoom-badge-pop {
+    from { transform: scale(.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.downloads-menu-wrap,
+.history-menu-wrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.downloads-popover,
+.history-popover {
+    position: absolute;
+    top: 38px;
+    right: 0;
+    width: 380px;
+    max-height: 440px;
+    overflow: auto;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 18, 18, 0.98);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    backdrop-filter: blur(18px);
+}
+
+.history-popover { width: 420px; }
+
+.downloads-popover header,
+.history-popover header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.downloads-popover header strong,
+.history-popover header strong {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.downloads-popover header small,
+.history-popover header small {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.downloads-popover header button {
+    border: 0;
+    background: transparent;
+    color: #ff8b2b;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+.empty-panel {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    padding: 8px 2px 10px;
+}
+
+.download-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.download-name {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: rgba(255, 255, 255, 0.9);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.download-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.download-row.interrupted .download-meta,
+.download-row.cancelled .download-meta { color: #ff7a7a; }
+
+.download-danger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #ffcf7a;
+}
+
+.download-actions { display: flex; gap: 6px; }
+
+.download-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 11px;
+    padding: 4px 9px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.download-actions button:hover { background: rgba(255, 255, 255, 0.08); }
+
+.download-progress {
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.09);
+    overflow: hidden;
+}
+
+.download-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #ff6a00, #ff9a3d);
+    transition: width 220ms ease;
+}
+
+.history-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    font: inherit;
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.history-row:hover { background: rgba(255, 255, 255, 0.08); }
+
+.history-title {
+    font-size: 12.5px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.history-url {
+    font-size: 10.5px;
+    color: rgba(255, 255, 255, 0.42);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
