@@ -2,11 +2,14 @@ import { app, BrowserWindow, DownloadItem, session, shell } from 'electron';
 import * as path from 'path';
 import { StorageService, DownloadRecord } from './storage';
 
-function sanitizeFilename(name: string): string {
-    return name.replace(/[\\/:*?"<>|]/g, '_').trim() || `hoo-download-${Date.now()}`;
+export function sanitizeFilename(name: string): string {
+    const cleaned = name.replace(/[\\/:*?"<>|]/g, '_').trim();
+    // A name made only of separators ('///' -> '___') is still garbage; fall back.
+    if (!cleaned || /^_+$/.test(cleaned)) return `hoo-download-${Date.now()}`;
+    return cleaned;
 }
 
-function riskyFileHint(filename: string): string | undefined {
+export function riskyFileHint(filename: string): string | undefined {
     const ext = path.extname(filename).toLowerCase();
     const risky = new Set(['.exe', '.msi', '.bat', '.cmd', '.ps1', '.scr', '.vbs', '.jar', '.apk', '.deb', '.appimage']);
     return risky.has(ext) ? `Executable or installer file (${ext}). Only open it if you trust the source.` : undefined;

@@ -1,6 +1,6 @@
 {
   "name": "hoo-browser",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "productName": "Hoo Browser",
   "description": "Owl-guided, DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and Linux-first freedom.",
   "main": "dist/main/main.js",
@@ -17,7 +17,9 @@
     "hotfix:google-auth": "node scripts/apply-google-auth-external-mode.cjs",
     "verify:hoo": "node scripts/verify-hoo-local.cjs",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run verify:hoo && npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run verify:hoo && npm run typecheck && npm test && npm run build",
     "dist": "npm run build:prod && electron-builder --linux AppImage deb",
     "dist:linux": "npm run build:prod && electron-builder --linux AppImage deb",
     "dist:appimage": "npm run build:prod && electron-builder --linux AppImage",
@@ -84,7 +86,6 @@
     }
   },
   "devDependencies": {
-    "@types/electron": "^1.4.38",
     "@types/node": "^25.2.0",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
@@ -96,6 +97,7 @@
     "ts-loader": "^9.5.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
   },

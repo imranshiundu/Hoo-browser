@@ -1,4 +1,4 @@
-import { app, BrowserWindow, BrowserView, ipcMain, session } from "electron";
+import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard } from "electron";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
@@ -61,6 +61,10 @@ function getPageUrlForRequest(details: any): string {
 
 function isHomeUrl(url?: string): boolean {
     return !url || url === 'about:blank' || url === 'hoo://home';
+}
+
+function getActiveView(): BrowserView | null {
+    return activeTabId ? browserViews.get(activeTabId) || null : null;
 }
 
 function hideAllBrowserViews(): void {
@@ -150,7 +154,7 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
     view.setAutoResize({ width: true, height: true });
     view.webContents.setBackgroundThrottling(false);
 
-    view.webContents.setWindowOpenHandler((details): Electron.HandlerDetails => {
+    view.webContents.setWindowOpenHandler((details): Electron.WindowOpenHandlerResponse => {
         const sourceUrl = view.webContents.getURL();
         if (isHardBlockedHost(details.url) || isLikelyForcedRedirect(details.url, sourceUrl)) {
             void view.webContents.loadURL(buildBlockedPage(details.url, 'A site tried to open an unwanted popup/new window. Hoo blocked it and kept you on the current tab.'));
@@ -383,33 +387,107 @@ function updateBrowserViewBounds(): void {
     }
 }
 
-function showBrowserView(tabId: string, isSplit = false): void {
+function showBrowserView(tabId: string, keepSplit = false): void {
     if (!mainWindow) return;
     const view = browserViews.get(tabId);
     if (!view) {
         showHomeForTab(tabId);
         return;
     }
-    if (isSplit) splitTabId = tabId;
-    else {
-        activeTabId = tabId;
-        splitTabId = null;
-    }
 
-    const needed = new Set<string>([tabId]);
+    activeTabId = tabId;
+    if (!keepSplit) splitTabId = null;
+    if (splitTabId === activeTabId) splitTabId = null;
+
+    const needed = new Set<string>([activeTabId]);
     if (splitTabId) needed.add(splitTabId);
 
     browserViews.forEach((browserView, id): void => {
-        if (!needed.has(id)) mainWindow!.removeBrowserView(browserView);
+        if (!needed.has(id) && mainWindow!.getBrowserViews().includes(browserView)) {
+            mainWindow!.removeBrowserView(browserView);
+        }
     });
 
-    if (!mainWindow.getBrowserViews().includes(view)) mainWindow.addBrowserView(view);
-    if (splitTabId) {
-        const splitView = browserViews.get(splitTabId);
-        if (splitView && !mainWindow.getBrowserViews().includes(splitView)) mainWindow.addBrowserView(splitView);
-    }
+    needed.forEach((id): void => {
+        const neededView = browserViews.get(id);
+        if (neededView && !mainWindow!.getBrowserViews().includes(neededView)) {
+            mainWindow!.addBrowserView(neededView);
+        }
+    });
+
     updateBrowserViewBounds();
 }
+
+
+ipcMain.handle('show-tab-menu', async (_event, payload: {
+    x: number;
+    y: number;
+    tabId: string;
+    title?: string;
+    url?: string;
+    isPinned?: boolean;
+    isActive?: boolean;
+    canClose?: boolean;
+    canSplit?: boolean;
+    hasTabsToRight?: boolean;
+}): Promise<string | null> => {
+    if (!mainWindow) return null;
+    return new Promise((resolve): void => {
+        let done = false;
+        const choose = (action: string | null): void => {
+            if (done) return;
+            done = true;
+            resolve(action);
+        };
+        const template: Electron.MenuItemConstructorOptions[] = [
+            { label: payload.isPinned ? 'Unpin tab' : 'Pin tab', click: () => choose('toggle-pin') },
+            { label: 'Duplicate tab', enabled: !!payload.url, click: () => choose('duplicate') },
+            { label: 'Open in split screen', enabled: !!payload.canSplit, click: () => choose('split') },
+            { label: 'Copy tab URL', enabled: !!payload.url, click: () => { if (payload.url) clipboard.writeText(payload.url); choose('copy-url'); } },
+            { type: 'separator' },
+            { label: 'Close other tabs', click: () => choose('close-others') },
+            { label: 'Close tabs to the right', enabled: !!payload.hasTabsToRight, click: () => choose('close-right') },
+            { label: 'Close tab', enabled: payload.canClose !== false, click: () => choose('close') },
+        ];
+        Menu.buildFromTemplate(template).popup({
+            window: mainWindow,
+            x: Math.max(8, Math.floor(payload.x || 8)),
+            y: Math.max(42, Math.floor(payload.y || 42)),
+            callback: () => choose(null)
+        });
+    });
+});
+
+ipcMain.handle('show-new-tab-menu', async (_event, payload: {
+    x: number;
+    y: number;
+    canReopenClosedTab?: boolean;
+    hasDuplicateTabs?: boolean;
+}): Promise<string | null> => {
+    if (!mainWindow) return null;
+    return new Promise((resolve): void => {
+        let done = false;
+        const choose = (action: string | null): void => {
+            if (done) return;
+            done = true;
+            resolve(action);
+        };
+        const template: Electron.MenuItemConstructorOptions[] = [
+            { label: 'New tab', click: () => choose('new-tab') },
+            { label: 'Reopen closed tab', enabled: !!payload.canReopenClosedTab, click: () => choose('reopen-closed') },
+            { label: 'Bookmark all tabs', click: () => choose('bookmark-all') },
+            { label: 'Close duplicate tabs', enabled: !!payload.hasDuplicateTabs, click: () => choose('close-duplicates') },
+            { type: 'separator' },
+            { label: 'Copy all tab URLs', click: () => choose('copy-all-urls') },
+        ];
+        Menu.buildFromTemplate(template).popup({
+            window: mainWindow,
+            x: Math.max(8, Math.floor(payload.x || 8)),
+            y: Math.max(42, Math.floor(payload.y || 42)),
+            callback: () => choose(null)
+        });
+    });
+});
 
 ipcMain.handle('update-privacy-settings', async (_event, settings): Promise<any> => {
     privacySettings = { ...privacySettings, ...settings };
@@ -491,9 +569,25 @@ ipcMain.handle('switch-tab', async (_event, tabId: string): Promise<string> => {
 });
 
 ipcMain.handle('set-mosaic-view', async (_event, tabId1: string, tabId2: string): Promise<any> => {
+    if (!mainWindow || tabId1 === tabId2) return { activeTabId, splitTabId };
+    const data = StorageService.load();
+    const first = data.tabs.find(t => t.id === tabId1);
+    const second = data.tabs.find(t => t.id === tabId2);
+    if (!first || !second || isHomeUrl(first.url) || isHomeUrl(second.url)) return { activeTabId, splitTabId };
+
+    if (!browserViews.has(tabId1)) {
+        const firstView = createBrowserViewForTab(tabId1, first.partition);
+        if (first.url) void firstView.webContents.loadURL(first.url);
+    }
+    if (!browserViews.has(tabId2)) {
+        const secondView = createBrowserViewForTab(tabId2, second.partition);
+        if (second.url) void secondView.webContents.loadURL(second.url);
+    }
+
     activeTabId = tabId1;
     splitTabId = tabId2;
     showBrowserView(tabId1, true);
+    StorageService.save({ activeTabId: tabId1 });
     return { activeTabId, splitTabId };
 });
 

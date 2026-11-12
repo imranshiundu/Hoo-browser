@@ -66,6 +66,12 @@ declare global {
         switchTab: (tabId: string) => Promise<string>;
         closeTab: (tabId: string) => Promise<void>;
         renameTab: (tabId: string, title: string) => Promise<void>;
+        showTabMenu: (payload: any) => Promise<string | null>;
+        showNewTabMenu: (payload: any) => Promise<string | null>;
+        // Find-in-page is renderer-gated until main-process wiring lands;
+        // both stay optional so the UI can degrade gracefully.
+        findInPage?: (tabId: string, query: string, options?: { forward?: boolean; findNext?: boolean }) => Promise<unknown>;
+        stopFindInPage?: (tabId: string) => Promise<unknown>;
         navigateTo: (url: string) => Promise<string | null>;
         updatePrivacySettings: (settings: PrivacySettings) => Promise<PrivacySettings>;
         getInitialData: () => Promise<{ tabs: any[], history: any[], downloads?: any[], crashedTabs?: any[], settings: PrivacySettings, activeTabId?: string | null }>;

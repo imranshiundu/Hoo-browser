@@ -7,6 +7,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/imranshiundu/Hoo-browser/actions/workflows/ci.yml"><img src="https://github.com/imranshiundu/Hoo-browser/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-3DBB78?style=flat-square" alt="License: MIT" /></a>
+  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-40-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron 40" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.9" /></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=white" alt="React 19" /></a>
+  <img src="https://img.shields.io/badge/platform-Linux%20%C2%B7%20Windows%20%C2%B7%20macOS-lightgrey?style=flat-square" alt="platform" />
+</p>
+
+<p align="center">
   Hoo Browser is a DuckDuckGo-first desktop browser focused on practical privacy,
   isolated web apps, and a calm, watchful browsing experience for Linux and beyond.
 </p>
@@ -15,139 +24,82 @@
 
 # Hoo Browser
 
-Hoo Browser is an experimental desktop browser shell built with Electron. The goal is to shape it into a real installable Linux-first browser for DuckDuckGo-first search, isolated web apps, practical privacy controls, encryption-aware local data, and optional local-first AI assistance.
+Hoo Browser is an experimental desktop browser shell built with Electron, TypeScript and React. The goal is a real installable Linux-first browser for DuckDuckGo-first search, isolated web apps, practical privacy controls, encryption-aware local data, and optional local-first AI assistance.
 
-Hoo is not just a renamed Zen. The product direction is now owl-guided: the browser should feel watchful, calm, useful, protective, and honest about what it can and cannot do.
-
-This is still not a finished Chrome, Brave, Firefox, or Arc replacement. It can render web pages through Electron's Chromium engine, but the project still needs stronger downloads, visible permission prompts, crash recovery, tests, maintained privacy filters, and packaging verification before it should be trusted as a daily driver.
-
-## Brand system
-
-### Name
-
-**Hoo Browser**
-
-### Tagline
-
-**OWL-GUIDED. PRIVACY-FIRST. WEB FREEDOM.**
-
-### Colors
-
-- **Hoo Orange** — `#FF6A00`
-- **Leaf Green** — `#3DBB78`
-- **Feather Cream** — `#F2F2EF`
-- **Forest Black** — `#0E1111`
-- **Slate Charcoal** — `#171B1D`
-
-### Mascot direction
-
-Hoo is the watchful owl guide. The mascot is not decoration. It should appear in the app icon, new-tab identity, privacy moments, settings, empty states, and protection prompts. The tone should be friendly and useful, not childish.
-
-Brand assets live in:
+Hoo is owl-guided: the browser should feel watchful, calm, useful, protective, and honest about what it can and cannot do. That honesty extends to this README — everything listed here exists in the code, and the [known problems](#known-problems) section is kept up to date on purpose.
 
 ```text
-src/renderer/assets/branding/
-docs/branding/
+src/main/       Electron main process — 14 modules for tabs, storage, privacy, downloads, auth
+src/preload/    Typed contextIsolation bridge — renderer never touches Node
+src/renderer/   React 19 UI — views, command palette, settings, branding
+tests           Vitest unit suite over the main-process privacy & storage logic
 ```
+
+## Why this project is interesting
+
+Building a browser shell means taking real responsibility for the parts most
+apps never touch:
+
+- **Network policy engine** — a typed request classifier (`network-policy.ts`)
+  that decides per-request blocking across four performance modes, with
+  compatibility exemptions for sites that break under aggressive privacy rules.
+- **Privacy filter pipeline** — ad/tracker host matching, forced-redirect
+  scam detection, third-party cookie/referer stripping, and `X-Client-Data`
+  removal (`privacy-filters.ts`), all covered by unit tests.
+- **Resilient profile storage** — atomic JSON writes with quarantine of
+  corrupted profiles and transparent reads of legacy `safeStorage`-encrypted
+  data (`storage.ts`).
+- **Process discipline** — tab lifecycle states (`placeholder → loaded →
+  sleeping → crashed`), download danger hints for executable files, and a
+  strict main/preload/renderer boundary.
 
 ## Current status
 
 Version: `v0.2 Hoo Foundation`
 
-The current codebase includes early versions of:
+The current codebase includes working early versions of:
 
 - Chromium rendering through Electron `BrowserView`
-- tabs with persisted basic state
-- navigation controls
-- DuckDuckGo-first home search
-- isolated web-app profiles
-- WhatsApp Web profile experiment for Linux
-- privacy toggles
-- bookmarks
-- RSS
-- MEGA sync experiment
-- OpenClaw AI panel
-- Linux install/update scripts
-- Hoo branded home UI and README identity
-
-The important work now is to make the project stable, testable, installable, and honest.
-
-## What makes a real browser real?
-
-A real browser is not just an app that opens a website. A real browser needs:
-
-- a modern rendering engine
-- address/search navigation
-- tabs and session restore
-- bookmarks and history
-- downloads
-- permissions for camera, microphone, notifications, location, and clipboard
-- storage boundaries
-- crash recovery
-- security controls
-- update/install packaging
-- clear privacy behavior that matches the code
-
-Hoo already has the beginning of rendering, navigation, tabs, app profiles, bookmarks, and privacy layers. It still needs stronger downloads, permissions UI, crash recovery, tests, packaging, and privacy hardening before it can be called daily-driver ready.
-
-See [`docs/real-browser-checklist.md`](docs/real-browser-checklist.md).
-
-## Product identity
-
-Hoo should become useful first as:
-
-> A DuckDuckGo-first desktop browser for isolated web apps, practical privacy controls, encryption-aware local profile data, and a calm owl-guided browsing experience.
-
-DuckDuckGo is the default search identity. Startpage and Qwant are privacy alternatives. Google can exist as a user-selected fallback, but it should not define the browser.
-
-WhatsApp support matters. It should remain one of the strongest web-app profiles, especially for Linux users, but Hoo should not become only a WhatsApp wrapper.
-
-## Core features in the prototype
-
-### Browsing
-
-- Electron `BrowserView` based Chromium rendering
-- tabs with persisted basic state
-- navigation controls
-- DuckDuckGo-first home search
-- split-screen tab view
-- custom app shell
-
-### Web apps
-
-- app launcher for common web services
-- isolated persistent partitions for launched apps
-- WhatsApp Web profile with Windows user-agent spoofing experiment for Linux calling support
-
-### Privacy and encryption controls
-
-- simple ad/tracker host blocking
-- HTTPS upgrade attempt for HTTP URLs
-- optional user-agent spoofing
-- configurable history retention
+- tabs with persisted basic state and a documented lifecycle
+- navigation controls and DuckDuckGo-first home search
+- isolated web-app profiles (persistent partitions per app)
+- privacy toggles, bookmarks, RSS reader
+- simple ad/tracker host blocking with compatibility allowlist
+- HTTPS upgrade for HTTP URLs, optional user-agent control
 - local storage through Electron `safeStorage` where available
-- encryption status and encrypted backup/sync still need stronger implementation
+- OpenClaw AI panel (local gateway, explicit user-gated context)
+- Linux install/update scripts and cross-platform packaging metadata
+- Vitest unit tests and GitHub Actions CI
 
-These controls are early. Treat them as practical experiments, not strong privacy guarantees.
+The important work now is to make the project stable, testable, installable, and honest — tests and CI exist, the next milestone is `v0.3 Stable Tabs`.
 
-See [`docs/encryption-plan.md`](docs/encryption-plan.md).
+## Test suite
 
-### AI panel
+The privacy and storage logic is unit-tested with Vitest:
 
-- OpenClaw panel in the sidebar
-- local gateway status check
-- current page title and URL can be passed as context
+```bash
+npm install
+npm test          # run the Vitest suite
+npm run typecheck # strict tsc --noEmit over src/
+npm run build     # webpack build (main + preload + renderer)
+npm run verify    # project verification + build
+```
 
-The AI layer must remain explicit and user-controlled. Hoo should not silently scrape or send page content.
+CI (`.github/workflows/ci.yml`) runs typecheck, tests, and a production build
+on every push and pull request to `main`.
+
+Covered modules today:
+
+| Module | What the tests pin down |
+| --- | --- |
+| `privacy-filters.ts` | request blocking rules, compatibility-host exemptions, hard-blocked scam hosts, third-party header stripping, URL safety checks |
+| `network-policy.ts` | low-data/lite/extreme/compatibility mode behavior for fonts, media, beacons, prefetch and tracker hosts |
+| `storage.ts` | profile normalization, corrupt-tab filtering, active-tab validation, atomic save/load round-trips |
+| `download-manager.ts` | filename sanitization and executable danger hints |
 
 ## Install on Linux
 
-Requirements:
-
-- Node.js 18 or newer
-- npm 9 or newer
-- Git
-- Electron-supported Linux desktop
+Requirements: Node.js 18+, npm 9+, Git, an Electron-supported Linux desktop.
 
 Install directly from GitHub:
 
@@ -158,119 +110,80 @@ curl -fsSL https://raw.githubusercontent.com/imranshiundu/Hoo-browser/main/scrip
 The installer:
 
 - clones Hoo into `~/.local/share/hoo-browser`
-- installs dependencies
-- builds the Electron app
+- installs dependencies and builds the app
 - creates a `hoo-browser` launcher in `~/.local/bin`
 - creates a desktop launcher so Hoo appears in the app menu
 - installs a user-level systemd timer that checks for updates every 7 days
 
-Start it from your app launcher or run:
-
-```bash
-hoo-browser
-```
+Start it from your app launcher or run `hoo-browser`.
 
 ## Development setup
-
-Clone the repository:
 
 ```bash
 git clone https://github.com/imranshiundu/Hoo-browser.git
 cd Hoo-browser
-```
-
-Install dependencies:
-
-```bash
 npm install
+npm run dev:start   # build + launch
+npm start           # launch a built app
+npm test            # unit tests
+npm run typecheck   # tsc --noEmit
 ```
 
-Run a development build:
+Packaging:
 
 ```bash
-npm run dev:start
+npm run dist            # AppImage + deb (Linux)
+npm run dist:appimage   # AppImage only
+npm run dist:deb        # deb only
+npm run dist:win        # NSIS + portable (Windows)
+npm run dist:mac        # dmg + zip (macOS)
 ```
 
-Build only:
+Packaging needs clean-machine verification before release builds are advertised.
 
-```bash
-npm run build
-```
-
-Run type checking:
-
-```bash
-npm run typecheck
-```
-
-Run the basic verification command:
-
-```bash
-npm run verify
-```
-
-Start the app:
-
-```bash
-npm start
-```
-
-Only use the unsafe no-sandbox command when debugging a local environment that requires it:
-
-```bash
-npm run start:unsafe-no-sandbox
-```
-
-## Packaging
-
-Early packaging scripts are available:
-
-```bash
-npm run dist
-npm run dist:appimage
-npm run dist:deb
-```
-
-Packaging still needs clean-machine verification before public release builds should be advertised.
-
-## Project structure
+## Architecture notes
 
 ```text
 src/
-  main/        Electron main process, BrowserView management, storage, sync, privacy filters
-  preload/     safe bridge exposed to the renderer
-  renderer/    React interface, views, panels, navigation, settings, branding assets
-
+  main/                 Electron main process
+    main.ts             window + BrowserView orchestration, IPC surface
+    storage.ts          atomic profile persistence, crash records, retention
+    privacy-filters.ts  ad/tracker/scam filtering, header hygiene
+    network-policy.ts   per-mode request policy (balanced/lite/extreme/compatibility)
+    tab-lifecycle.ts    tab runtime state machine
+    download-manager.ts download records, executable danger hints
+    auth.ts, sync.ts, update-service.ts, protocols.ts, ...
+  preload/
+    preload.ts          contextIsolation bridge — the only renderer door
+  renderer/
+    App.tsx + views/    React 19 interface
+    components/         command palette, settings, panels
 docs/
-  branding/                  README and brand assets
-  encryption-plan.md
-  real-browser-checklist.md
-  rebuild-plan.md
+  native-security-architecture.md   security design notes
+  browser-hardening-phase-1.md      hardening log
+  real-browser-checklist.md         what "real browser" requires
+  encryption-plan.md                local data encryption plan
+  performance-budget.md             performance targets
+  rebuild-plan.md                   roadmap details
 ```
 
 ## Personal path policy
 
-Do not commit personal machine paths such as `/home/imran/...` or private local folder structures into the product UI, docs, defaults, or screenshots.
-
-Use generic paths only:
-
-```text
-~/.config/hoo-browser
-/path/to/openclaw/docker-compose.yml
-```
-
-Local developer paths can exist in a private `.env` or ignored local config file, not in source-controlled product defaults.
+Do not commit personal machine paths such as `/home/imran/...` into product
+UI, docs, defaults, or screenshots. Use generic paths only
+(`~/.config/hoo-browser`). Local developer paths belong in a private `.env`
+that is git-ignored.
 
 ## Known problems
 
-These are not small issues. They are why Hoo still needs a rebuild path.
+These are tracked honestly instead of hidden:
 
-1. The ad/tracker blocker uses a small hard-coded list, not maintained filter lists.
+1. The ad/tracker blocker uses a curated static list, not maintained filter lists.
 2. Random user-agent rotation can make fingerprinting worse if used incorrectly.
 3. Download manager UI is not complete yet.
 4. Permission prompts for camera, microphone, notifications, location, and clipboard need a visible Hoo-controlled UX.
-5. Crash recovery needs implementation.
-6. The project has no automated tests yet.
+5. Crash recovery needs further implementation (crash records exist; restore UX does not).
+6. ~~The project has no automated tests yet.~~ Main-process logic is now unit-tested; renderer components are not yet covered.
 7. RSS currently depends on renderer-side fetching patterns that should move to the main process.
 8. Cloud sync needs stronger conflict handling and clearer data boundaries.
 9. IPC actions need tighter validation as the browser grows.
@@ -278,11 +191,9 @@ These are not small issues. They are why Hoo still needs a rebuild path.
 
 ## Rebuild path
 
-Use simple version names:
-
 - `v0.1 Foundation` — honest docs, build scripts, verification, project contract
-- `v0.2 Hoo Foundation` — Hoo identity, installer path, branded home UI, packaging metadata
-- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling
+- `v0.2 Hoo Foundation` — Hoo identity, installer path, branded home UI, packaging metadata, **test suite + CI**
+- `v0.3 Stable Tabs` — reliable tab restore, navigation state, crash handling ← *next*
 - `v0.4 Web Apps` — isolated app profiles, permissions, reset controls
 - `v0.5 Privacy Controls` — maintained filters, allowlists, visible blocked counts, stable fingerprint profile
 - `v0.6 Local Assistant` — streaming, explicit context, provider settings, local/cloud warnings
@@ -292,7 +203,7 @@ Use simple version names:
 
 Read the detailed plan in [`docs/rebuild-plan.md`](docs/rebuild-plan.md).
 
-## Contribution rules
+## Contributing
 
 Keep the project plain and professional.
 
@@ -301,10 +212,11 @@ Keep the project plain and professional.
 - Do not add hidden telemetry.
 - Do not send page content to AI providers without explicit user action.
 - Do not commit personal laptop paths or local-only folder structures.
-- Prefer small verified patches over huge rewrites.
-- Keep names simple and readable.
+- Prefer small verified patches over huge rewrites; add or update tests for anything touching `src/main`.
 - Document every feature that touches user data.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright (c) 2026 Imran Shiundu

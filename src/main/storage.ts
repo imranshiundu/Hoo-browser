@@ -72,7 +72,7 @@ const defaultData: StorageData = {
     lastUpdated: Date.now()
 };
 
-function normalizeStorageData(data: Partial<StorageData>): StorageData {
+export function normalizeStorageData(data: Partial<StorageData>): StorageData {
     const browserTabs = (data.tabs || [])
         .filter((tab: any) => tab?.type === 'browser')
         .filter((tab: any) => tab.url && tab.url !== 'about:blank')
