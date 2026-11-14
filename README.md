@@ -107,6 +107,17 @@ npm run verify    # project verification + build
 CI (`.github/workflows/ci.yml`) runs typecheck, tests, and a production build
 on every push and pull request to `main`.
 
+Releases (`.github/workflows/release.yml`) trigger on a `vX.Y.Z` tag: a
+three-platform matrix builds the AppImage/deb (Linux), NSIS + portable (Windows),
+and dmg/zip (macOS) installers, checks that the tag matches `package.json`,
+and publishes one GitHub Release with every artifact plus the `latest*.yml`
+metadata the in-app updater consumes. So shipping a version is:
+
+```bash
+# bump package.json first, then:
+git tag v0.7.0 && git push origin v0.7.0
+```
+
 Covered modules today:
 
 | Module | What the tests pin down |

@@ -1,0 +1,99 @@
+name: Release
+
+# Pushing a vX.Y.Z tag builds installers on all three platforms and publishes
+# one GitHub Release with every artifact plus the latest*.yml metadata files
+# electron-updater needs. This is what makes in-app auto-updates real.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} installers
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            args: --linux AppImage deb
+          - os: windows-latest
+            args: --win nsis portable
+          - os: macos-latest
+            args: --mac dmg zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # A release tag must always match the version the app reports, or the
+      # updater would compare the wrong numbers.
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "${PKG_VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${PKG_VERSION}" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Real packaging needs the real Electron binary, so unlike ci.yml there is
+      # no ELECTRON_SKIP_BINARY_DOWNLOAD here. --publish never keeps
+      # electron-builder from publishing on its own; the publish job below owns
+      # the release so latest*.yml and installers land together.
+      - name: Build installers
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder ${{ matrix.args }} --publish never
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            release/*.AppImage*
+            release/*.deb
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/latest*.yml
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: release
+
+      - name: Attach installers to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          files: |
+            release/*.AppImage
+            release/*.AppImage.blockmap
+            release/*.deb
+            release/*.exe
+            release/*.exe.blockmap
+            release/*.dmg
+            release/*.zip
+            release/latest*.yml

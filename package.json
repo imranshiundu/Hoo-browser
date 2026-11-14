@@ -74,7 +74,8 @@
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
             "createStartMenuShortcut": true,
-            "shortcutName": "Hoo Browser"
+            "shortcutName": "Hoo Browser",
+            "artifactName": "Hoo-Browser-Setup-${version}.${ext}"
         },
         "mac": {
             "target": [
@@ -88,6 +89,9 @@
             "provider": "github",
             "owner": "imranshiundu",
             "repo": "Hoo-browser"
+        },
+        "portable": {
+            "artifactName": "Hoo-Browser-Portable-${version}.${ext}"
         }
     },
     "devDependencies": {
