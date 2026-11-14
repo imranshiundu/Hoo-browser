@@ -66,8 +66,7 @@
                 "nsis",
                 "portable"
             ],
-            "icon": "src/renderer/assets/branding/hoo-app-icon.ico",
-            "publisherName": "Imran Shiundu"
+            "icon": "src/renderer/assets/branding/hoo-app-icon.ico"
         },
         "nsis": {
             "oneClick": false,
