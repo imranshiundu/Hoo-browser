@@ -188,7 +188,7 @@ function cleanDisplayUrl(url: string): string {
 }
 
 function buildHooStatusPage(kind: 'error' | 'blocked', title: string, message: string, url: string): string {
-    const owlPath = resolveAssetPath('assets/branding/hoo-app-icon.png').replace(/\\/g, '/');
+    const owlPath = resolveAssetPath('assets/branding/hoo-app-icon.svg').replace(/\\/g, '/');
     const owl = fs.existsSync(owlPath) ? 'file://' + owlPath : '';
     const safeTitle = escapeHooHtml(title);
     const safeMessage = escapeHooHtml(message);
@@ -574,7 +574,7 @@ function createWindow(): void {
         y: restored.y,
         frame: false,
         title: "Hoo Browser",
-        icon: resolveAssetPath('assets/branding/hoo-app-icon.png'),
+        icon: resolveAssetPath('assets/branding/hoo-app-icon.svg'),
         backgroundColor: "#0E1111",
         titleBarStyle: 'hidden',
         webPreferences: {
