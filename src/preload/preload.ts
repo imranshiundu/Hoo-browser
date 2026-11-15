@@ -51,9 +51,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onAppUpdateStatus: (callback: (status: any) => void) => {
         ipcRenderer.on('app-update-status', (_event, status) => callback(status));
     },
-    toggleSidebar: (collapsed: boolean) => ipcRenderer.invoke('toggle-sidebar', collapsed),
     hideBrowserView: () => ipcRenderer.invoke('hide-browser-view'),
     updateViewBounds: (bounds: any) => ipcRenderer.invoke('update-view-bounds', bounds),
+    exitPageFullscreen: (tabId?: string) => ipcRenderer.invoke('exit-page-fullscreen', tabId),
+    toggleOsFullscreen: () => ipcRenderer.invoke('toggle-os-fullscreen'),
     minimize: () => ipcRenderer.invoke('window-minimize'),
     maximize: () => ipcRenderer.invoke('window-maximize'),
     close: () => ipcRenderer.invoke('window-close'),
@@ -102,6 +103,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     },
     onZoomChanged: (callback: (tabId: string, percent: number) => void) => {
         ipcRenderer.on('zoom-changed', (_event, tabId, percent) => callback(tabId, percent));
+    },
+    onPageFullscreenChanged: (callback: (tabId: string, active: boolean) => void) => {
+        ipcRenderer.on('page-fullscreen-changed', (_event, tabId, active) => callback(tabId, active));
+    },
+    onOsFullscreenChanged: (callback: (active: boolean) => void) => {
+        ipcRenderer.on('os-fullscreen-changed', (_event, active) => callback(active));
     },
     googleLogin: () => ipcRenderer.invoke('google-login'),
     googleLogout: () => ipcRenderer.invoke('google-logout'),

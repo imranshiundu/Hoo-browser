@@ -64,6 +64,9 @@ let mainWindow: BrowserWindow | null = null;
 const browserViews: Map<string, BrowserView> = new Map();
 let activeTabId: string | null = null;
 let splitTabId: string | null = null;
+// Tab whose page took over the screen with HTML5 fullscreen (YouTube theater,
+// video players). The shell hides its chrome while this tab is active.
+let pageFullscreenTabId: string | null = null;
 let manualBounds: { x: number, y: number, width: number, height: number } | null = null;
 let openClawLoaded = false;
 
@@ -229,6 +232,11 @@ function cleanupTabRuntimeState(tabId: string): void {
     zoomByTab.delete(tabId);
     audibleTabs.delete(tabId);
     mutedTabs.delete(tabId);
+    // Closing the fullscreen tab restores the normal shell immediately.
+    if (pageFullscreenTabId === tabId) {
+        pageFullscreenTabId = null;
+        sendToShell('page-fullscreen-changed', tabId, false);
+    }
     // Deny any permission prompt the user never answered for this tab.
     pendingPermissionRequests.forEach((pending, requestId): void => {
         if (pending.tabId !== tabId) return;
@@ -395,6 +403,18 @@ function attachViewHandlers(tabId: string, view: BrowserView): void {
         if (tabId === activeTabId) sendToShell('page-target-url', url || '');
     });
 
+    // HTML5 fullscreen (YouTube's theater button, video players, games). The
+    // shell collapses its own chrome in response and shows the Firefox-style
+    // "<site> is now full screen" banner with an Exit button.
+    view.webContents.on('enter-html-full-screen', (): void => {
+        pageFullscreenTabId = tabId;
+        sendToShell('page-fullscreen-changed', tabId, true);
+    });
+    view.webContents.on('leave-html-full-screen', (): void => {
+        if (pageFullscreenTabId === tabId) pageFullscreenTabId = null;
+        sendToShell('page-fullscreen-changed', tabId, false);
+    });
+
     // A crashed renderer used to leave a silent blank rectangle.
     view.webContents.on('render-process-gone', (_event, details): void => {
         audibleTabs.delete(tabId);
@@ -547,8 +567,10 @@ function createWindow(): void {
     mainWindow.on('resize', triggerResize);
     mainWindow.on('maximize', triggerResize);
     mainWindow.on('unmaximize', triggerResize);
-    mainWindow.on('enter-full-screen', scheduleWindowStateSave);
-    mainWindow.on('leave-full-screen', scheduleWindowStateSave);
+    // F11 (OS fullscreen) drives the same immersive shell as HTML5 fullscreen:
+    // chrome hides, and moving the pointer to the top edge slides it back down.
+    mainWindow.on('enter-full-screen', (): void => { sendToShell('os-fullscreen-changed', true); scheduleWindowStateSave(); });
+    mainWindow.on('leave-full-screen', (): void => { sendToShell('os-fullscreen-changed', false); scheduleWindowStateSave(); });
     mainWindow.on('close', scheduleWindowStateSave);
 }
 
@@ -556,6 +578,29 @@ ipcMain.handle('hide-browser-view', async (): Promise<void> => {
     hideAllBrowserViews();
     manualBounds = null;
     setWindowTitle('New Tab - Hoo Browser');
+});
+
+// Exit button / Esc fallback for HTML5 fullscreen. userGesture=true because
+// document.exitFullscreen() normally requires transient user activation.
+ipcMain.handle('exit-page-fullscreen', async (_event, tabId?: string): Promise<void> => {
+    const target = tabId || pageFullscreenTabId;
+    const view = target ? browserViews.get(target) : undefined;
+    if (view && !view.webContents.isDestroyed()) {
+        await view.webContents.executeJavaScript(
+            'if (document.fullscreenElement) document.exitFullscreen();',
+            true
+        ).catch((): undefined => undefined);
+    }
+    if (pageFullscreenTabId) {
+        const exited = pageFullscreenTabId;
+        pageFullscreenTabId = null;
+        sendToShell('page-fullscreen-changed', exited, false);
+    }
+});
+
+ipcMain.handle('toggle-os-fullscreen', async (): Promise<void> => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.setFullScreen(!mainWindow.isFullScreen());
 });
 
 ipcMain.handle('update-view-bounds', async (_event, bounds: { x: number, y: number, width: number, height: number }): Promise<void> => {
@@ -849,6 +894,20 @@ ipcMain.handle('create-tab', async (_event, url: string, partition?: string, isA
 });
 
 ipcMain.handle('switch-tab', async (_event, tabId: string): Promise<string> => {
+    // Leaving the fullscreen tab drops its page out of fullscreen, like every
+    // real browser; returning to it later restores the normal view.
+    if (pageFullscreenTabId && pageFullscreenTabId !== tabId) {
+        const previous = browserViews.get(pageFullscreenTabId);
+        if (previous && !previous.webContents.isDestroyed()) {
+            void previous.webContents.executeJavaScript(
+                'if (document.fullscreenElement) document.exitFullscreen();',
+                true
+            ).catch((): undefined => undefined);
+        }
+        const exited = pageFullscreenTabId;
+        pageFullscreenTabId = null;
+        sendToShell('page-fullscreen-changed', exited, false);
+    }
     const data = StorageService.load();
     const tab = data.tabs.find(t => t.id === tabId);
     if (tab && isHomeUrl(tab.url)) {
@@ -1003,8 +1062,6 @@ ipcMain.handle('close-tab', async (_event, tabId: string): Promise<void> => {
         }
     }
 });
-
-ipcMain.handle('toggle-sidebar', async (): Promise<void> => updateBrowserViewBounds());
 
 async function openUrlInNewTabInternal(url: string): Promise<string | null> {
     if (!mainWindow) return null;

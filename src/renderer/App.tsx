@@ -10,9 +10,17 @@ import ExtensionsView from './views/ExtensionsView';
 import RSSView from './views/RSSView';
 import PermissionPrompt, { PendingPermissionRequest } from './components/PermissionPrompt';
 import TabStrip from './components/TabStrip';
-import { Tab, TabType } from './types';
+import { Tab, TabType, siteInitial, siteInitialStyle } from './types';
 import { reorderTabsByIds } from '../main/tab-utils';
-import { AlertTriangle, X } from 'lucide-react';
+import {
+    CHROME_HIDE_EDGE_PX,
+    INFOBAR_AUTO_HIDE_MS,
+    fullscreenOriginLabel,
+    isImmersive,
+    shouldHideChrome,
+    shouldRevealChrome
+} from './fullscreen-model';
+import { AlertTriangle, Maximize2, X } from 'lucide-react';
 
 const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
 // Internal pages behave like Chrome's chrome:// pages: renderer-only tabs,
@@ -50,8 +58,17 @@ const App: React.FC = () => {
     const [navState, setNavState] = useState<Record<string, { canGoBack: boolean; canGoForward: boolean }>>({});
     const [zoomBadge, setZoomBadge] = useState<{ percent: number; at: number } | null>(null);
     const [crashNotice, setCrashNotice] = useState<string | null>(null);
+    // Firefox-style fullscreen: a page (YouTube theater, video players) or F11
+    // takes over the window; the chrome hides, a banner explains how to leave,
+    // and bumping the pointer against the top edge slides the tabs back down.
+    const [pageFullscreenTabId, setPageFullscreenTabId] = useState<string | null>(null);
+    const [osFullscreen, setOsFullscreen] = useState(false);
+    const [chromeRevealed, setChromeRevealed] = useState(false);
+    const [infobarVisible, setInfobarVisible] = useState(false);
 
     const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0] || initialHomeTab;
+    const immersive = isImmersive({ pageFullscreenTabId, activeTabId, osFullscreen });
+    const fullscreenOrigin = fullscreenOriginLabel(activeTab?.url);
 
     useEffect(() => {
         localStorage.setItem(PINNED_TABS_KEY, JSON.stringify(pinnedTabIds.filter(id => tabs.some(tab => tab.id === id))));
@@ -392,7 +409,49 @@ const App: React.FC = () => {
         window.electronAPI?.onZoomChanged?.((tabId, percent) => {
             if (tabId === activeTabId) setZoomBadge({ percent, at: Date.now() });
         });
+        window.electronAPI?.onPageFullscreenChanged?.((tabId, active) => {
+            setPageFullscreenTabId(current => active ? tabId : (current === tabId ? null : current));
+        });
+        window.electronAPI?.onOsFullscreenChanged?.((active) => setOsFullscreen(active));
     }, []);
+
+    // A page (or F11) taking over the screen: drop split view, announce the
+    // banner, and reset the reveal overlay. Leaving reverses everything.
+    useEffect(() => {
+        if (!immersive) {
+            setChromeRevealed(false);
+            setInfobarVisible(false);
+            return;
+        }
+        setSplitTabId(null);
+        setChromeRevealed(false);
+        setInfobarVisible(true);
+        if (pageFullscreenTabId) void window.electronAPI?.clearMosaicView?.();
+    }, [immersive, pageFullscreenTabId]);
+
+    // The banner is a hint, not a keeper: it auto-hides like Firefox's.
+    useEffect(() => {
+        if (!immersive || !infobarVisible) return;
+        const timer = window.setTimeout((): void => setInfobarVisible(false), INFOBAR_AUTO_HIDE_MS);
+        return () => window.clearTimeout(timer);
+    }, [immersive, infobarVisible]);
+
+    // Firefox's signature move: slam the pointer into the top edge and the
+    // tab strip slides down over the page; move away and it hides again.
+    useEffect(() => {
+        if (!immersive) return;
+        const onMove = (event: MouseEvent): void => {
+            if (shouldRevealChrome(event.clientY)) setChromeRevealed(true);
+            else if (shouldHideChrome(event.clientY, CHROME_HIDE_EDGE_PX)) setChromeRevealed(false);
+        };
+        window.addEventListener('mousemove', onMove);
+        return () => window.removeEventListener('mousemove', onMove);
+    }, [immersive]);
+
+    const exitImmersive = (): void => {
+        if (pageFullscreenTabId) void window.electronAPI?.exitPageFullscreen?.(pageFullscreenTabId);
+        else if (osFullscreen) void window.electronAPI?.toggleOsFullscreen?.();
+    };
 
     // Only Escape remains as a shell-level key handler; every other browser
     // shortcut is an app-menu accelerator so it also works inside pages.
@@ -401,11 +460,18 @@ const App: React.FC = () => {
             if (e.key === 'Escape' && settingsOpen) {
                 e.preventDefault();
                 setSettingsOpen(false);
+                return;
+            }
+            // Esc fallback for fullscreen when the page itself does not have
+            // focus (after clicking the banner or the revealed tab strip).
+            // The in-page find bar gets the key first and must not be skipped.
+            if (e.key === 'Escape' && immersive && pageFullscreenTabId && !document.querySelector('.find-in-page-bar')) {
+                void window.electronAPI?.exitPageFullscreen?.(pageFullscreenTabId);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [settingsOpen]);
+    }, [settingsOpen, immersive, pageFullscreenTabId]);
 
     useEffect(() => {
         if (settingsOpen) {
@@ -468,7 +534,7 @@ const App: React.FC = () => {
     const activeNavState = navState[activeTabId] || { canGoBack: true, canGoForward: true };
 
     return (
-        <div className="app-shell">
+        <div className={`app-shell ${immersive ? 'immersive' : ''}`}>
             <TitleBar />
             {crashNotice && (
                 <div className="crash-notice" role="status">
@@ -531,6 +597,41 @@ const App: React.FC = () => {
                     )}
                 </section>
             </main>
+            {/* Firefox-style fullscreen chrome: slides down when the pointer
+                hits the top edge, hides again when it leaves. Tabs stay one
+                click away while a video owns the screen. */}
+            {immersive && (
+                <div className={`fullscreen-overlay ${chromeRevealed ? 'revealed' : ''}`}>
+                    <div className="fullscreen-tabs" role="tablist" aria-label="Open tabs">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                role="tab"
+                                aria-selected={tab.id === activeTabId}
+                                className={`fullscreen-tab ${tab.id === activeTabId ? 'active' : ''}`}
+                                onClick={(): void => { void handleSwitchTab(tab.id); setChromeRevealed(false); }}
+                                title={tab.title || 'New Tab'}
+                            >
+                                {favicons[tab.id]
+                                    ? <img className="fullscreen-tab-favicon" src={favicons[tab.id]} alt="" />
+                                    : <span className="fullscreen-tab-favicon" style={siteInitialStyle(siteInitial(tab.url))}>{siteInitial(tab.url)?.letter || '•'}</span>}
+                                <span className="fullscreen-tab-title">{tab.title || 'New Tab'}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <button className="fullscreen-exit-btn" onClick={exitImmersive} title="Leave fullscreen (Esc)">
+                        <Maximize2 size={13} /> Exit full screen
+                    </button>
+                </div>
+            )}
+            {immersive && infobarVisible && !chromeRevealed && (
+                <div className="fullscreen-infobar" role="status">
+                    <Maximize2 size={13} />
+                    <span><strong>{fullscreenOrigin}</strong> is now full screen</span>
+                    <button onClick={exitImmersive}>Exit</button>
+                    <kbd>Esc</kbd>
+                </div>
+            )}
             <PermissionPrompt
                 request={permissionQueue.length ? permissionQueue[0] : null}
                 onResolve={resolvePermission}

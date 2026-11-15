@@ -240,3 +240,180 @@ body {
 .animate-fade-in {
   animation: fadeIn var(--transition-normal) forwards;
 }
+
+/* ---- Firefox-style fullscreen -------------------------------------------
+   While a page (or F11) owns the screen the shell chrome is removed from the
+   flow so the content gets every pixel; the BrowserView bounds then follow
+   automatically through the shell's ResizeObserver. The overlay tab strip is
+   position:fixed so revealing it never resizes the page. */
+.app-shell.immersive .title-bar,
+.app-shell.immersive .tab-strip,
+.app-shell.immersive .navigation-bar,
+.app-shell.immersive .crash-notice {
+  display: none;
+}
+
+.fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(10, 10, 10, 0.93);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transform: translateY(-102%);
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.fullscreen-overlay.revealed {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.fullscreen-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.fullscreen-tabs::-webkit-scrollbar { display: none; }
+
+.fullscreen-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  max-width: 220px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fullscreen-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.fullscreen-tab.active {
+  background: rgba(255, 106, 0, 0.16);
+  border-color: rgba(255, 106, 0, 0.45);
+  color: #fff;
+}
+
+.fullscreen-tab-favicon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 3px;
+  object-fit: contain;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.fullscreen-tab-title {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fullscreen-exit-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 106, 0, 0.5);
+  background: rgba(255, 106, 0, 0.14);
+  color: #ffb37a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fullscreen-exit-btn:hover {
+  background: rgba(255, 106, 0, 0.28);
+  color: #fff;
+}
+
+.fullscreen-infobar {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4100;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(540px, calc(100vw - 24px));
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(12, 12, 12, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12.5px;
+  animation: fullscreen-infobar-in 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fullscreen-infobar-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.fullscreen-infobar strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.fullscreen-infobar button {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 106, 0, 0.5);
+  background: rgba(255, 106, 0, 0.16);
+  color: #ffb37a;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fullscreen-infobar button:hover {
+  background: rgba(255, 106, 0, 0.3);
+  color: #fff;
+}
+
+.fullscreen-infobar kbd {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+}

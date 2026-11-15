@@ -151,8 +151,9 @@ declare global {
         getUpdateChannel: () => Promise<{ channel: 'electron-updater' | 'git-source' | 'none'; isPackaged: boolean }>;
         onAppUpdateStatus: (callback: (status: AppUpdateStatus) => void) => void;
         nuclearWipe: () => Promise<void>;
-        toggleSidebar: (collapsed: boolean) => Promise<void>;
         hideBrowserView: () => Promise<void>;
+        exitPageFullscreen: (tabId?: string) => Promise<void>;
+        toggleOsFullscreen: () => Promise<void>;
         minimize: () => Promise<void>;
         maximize: () => Promise<void>;
         close: () => Promise<void>;
@@ -171,6 +172,8 @@ declare global {
         onDownloadUpdated: (callback: (record: HooDownloadRecord) => void) => void;
         onDownloadListCleared: (callback: () => void) => void;
         onZoomChanged: (callback: (tabId: string, percent: number) => void) => void;
+        onPageFullscreenChanged: (callback: (tabId: string, active: boolean) => void) => void;
+        onOsFullscreenChanged: (callback: (active: boolean) => void) => void;
         googleLogin: () => Promise<any>;
         googleLogout: () => Promise<boolean>;
         megaLogin: (email: string, pass: string) => Promise<boolean>;
