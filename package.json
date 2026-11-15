@@ -38,7 +38,10 @@
         "desktop-app",
         "hoo"
     ],
-    "author": "Imran Shiundu",
+    "author": {
+        "name": "Imran Shiundu",
+        "email": "imranshiundu@gmail.com"
+    },
     "license": "MIT",
     "build": {
         "appId": "com.imranshiundu.hoo-browser",
