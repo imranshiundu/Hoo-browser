@@ -10,6 +10,7 @@ import ExtensionsView from './views/ExtensionsView';
 import RSSView from './views/RSSView';
 import PermissionPrompt, { PendingPermissionRequest } from './components/PermissionPrompt';
 import TabStrip from './components/TabStrip';
+import DownloadToasts from './components/DownloadToasts';
 import { Tab, TabType, siteInitial, siteInitialStyle } from './types';
 import { reorderTabsByIds } from '../main/tab-utils';
 import {
@@ -637,6 +638,7 @@ const App: React.FC = () => {
                 onResolve={resolvePermission}
                 onDismiss={dismissPermission}
             />
+            <DownloadToasts />
             <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );

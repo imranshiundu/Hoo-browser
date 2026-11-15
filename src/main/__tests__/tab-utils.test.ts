@@ -7,6 +7,7 @@ import {
     findStatusText,
     formatBytes,
     filterHistoryEntries,
+    previewCardText,
     reorderTabsByIds,
     stepZoomFactor,
     zoomPercent
@@ -203,5 +204,29 @@ describe('filterHistoryEntries', () => {
     it('survives entries with missing titles', () => {
         const weird = [{ title: undefined as any, url: 'https://x.com' }];
         expect(filterHistoryEntries(weird, 'x.com')).toHaveLength(1);
+    });
+});
+
+describe('previewCardText', () => {
+    it('prefers the page title with the site underneath', () => {
+        expect(previewCardText('GitHub - imranshiundu', 'https://github.com/imranshiundu')).toEqual({
+            heading: 'GitHub - imranshiundu',
+            sub: 'github.com'
+        });
+    });
+
+    it('falls back to the host while a page is still "Loading..."', () => {
+        expect(previewCardText('Loading...', 'https://www.youtube.com/watch?v=x').heading).toBe('youtube.com');
+    });
+
+    it('handles blank tabs and junk URLs without crashing', () => {
+        expect(previewCardText(undefined, undefined)).toEqual({ heading: 'New Tab', sub: '' });
+        expect(previewCardText('', 'not a url')).toEqual({ heading: 'not a url', sub: '' });
+    });
+
+    it('shows the full URL as the sub when the host is the heading', () => {
+        const card = previewCardText('Loading...', 'https://example.com/some/path');
+        expect(card.heading).toBe('example.com');
+        expect(card.sub).toBe('https://example.com/some/path');
     });
 });

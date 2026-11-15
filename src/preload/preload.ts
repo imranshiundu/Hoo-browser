@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     resolvePermission: (requestId: string, decision: 'allow' | 'block', remember: boolean) => ipcRenderer.invoke('resolve-permission', requestId, decision, remember),
     getSitePermissions: () => ipcRenderer.invoke('get-site-permissions'),
     clearSitePermissions: (key?: string) => ipcRenderer.invoke('clear-site-permissions', key),
+    setSitePermission: (origin: string, permission: string, decision: 'allow' | 'block' | 'ask') => ipcRenderer.invoke('set-site-permission', origin, permission, decision),
     getSiteZooms: () => ipcRenderer.invoke('get-site-zooms'),
     clearSiteZooms: () => ipcRenderer.invoke('clear-site-zooms'),
     restoreCrashedTabs: () => ipcRenderer.invoke('restore-crashed-tabs'),

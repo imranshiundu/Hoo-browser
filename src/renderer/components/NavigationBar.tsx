@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Search, Star, BookOpen, Download, Clock, Shield, MoreHorizontal, Settings, FolderOpen, ExternalLink, FileWarning, Home, Columns2, PanelRightClose, Sparkles, History, BookMarked, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Search, Star, BookOpen, Download, Clock, Shield, MoreHorizontal, Settings, FolderOpen, ExternalLink, FileWarning, Home, Columns2, PanelRightClose, Sparkles, History, BookMarked, Trash2, ShieldAlert } from 'lucide-react';
 import { filterHistoryEntries } from '../../main/tab-utils';
 import { Tab } from '../types';
 import { formatBytes } from '../../main/tab-utils';
+import { originFromUrl, permissionPanelLabel, cycleDecision, DECIDABLE_PERMISSIONS, PermissionResolution } from '../../main/permissions';
 
 interface NavigationBarProps {
     tabId: string;
@@ -41,6 +42,14 @@ interface HistoryEntry {
 }
 
 const BOOKMARK_KEY = 'hoo:bookmarks';
+// Panel order: the capabilities real sites ask for first.
+const SITE_INFO_PERMISSIONS: readonly string[] = [
+    'media', 'geolocation', 'notifications', 'display-capture',
+    'clipboard-sanitized-read', 'midi', 'pointerLock', 'fullscreen'
+].filter(p => (DECIDABLE_PERMISSIONS as readonly string[]).includes(p));
+
+const decisionChipClass = (decision: PermissionResolution): string =>
+    decision === 'allow' ? 'allow' : decision === 'block' ? 'block' : 'ask';
 
 const stateLabel = (entry: DownloadEntry): string => {
     if (entry.state === 'progressing') {
@@ -80,6 +89,9 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const [downloadsOpen, setDownloadsOpen] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [historySearch, setHistorySearch] = useState('');
+    const [siteInfoOpen, setSiteInfoOpen] = useState(false);
+    // `origin|permission` -> stored decision; a missing key means "Ask".
+    const [siteDecisions, setSiteDecisions] = useState<Record<string, 'allow' | 'block'>>({});
     const [bookmarks, setBookmarks] = useState<Array<{ id: string; title: string; url: string }>>([]);
     const [downloads, setDownloads] = useState<DownloadEntry[]>([]);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -87,6 +99,10 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => setInputValue(url), [url]);
+
+    // Navigating away invalidates the panel's site; close it rather than
+    // showing decisions for a site you just left.
+    useEffect(() => setSiteInfoOpen(false), [url]);
 
     const loadBookmarks = (): void => {
         try {
@@ -159,6 +175,7 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             if (!target?.closest('.split-menu-wrap')) setSplitOpen(false);
             if (!target?.closest('.downloads-menu-wrap')) setDownloadsOpen(false);
             if (!target?.closest('.history-menu-wrap')) setHistoryOpen(false);
+            if (!target?.closest('.siteinfo-menu-wrap')) setSiteInfoOpen(false);
         };
         document.addEventListener('mousedown', closePopovers);
         return () => document.removeEventListener('mousedown', closePopovers);
@@ -223,6 +240,32 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
         }
     };
 
+    const siteOrigin = originFromUrl(url);
+
+    const refreshSiteDecisions = async (): Promise<void> => {
+        if (!siteOrigin || !window.electronAPI?.getSitePermissions) return;
+        try {
+            const rows: Array<{ key: string; origin: string; decision: 'allow' | 'block' }> = await window.electronAPI.getSitePermissions();
+            const mine: Record<string, 'allow' | 'block'> = {};
+            rows.filter(row => row.origin === siteOrigin).forEach(row => { mine[row.key] = row.decision; });
+            setSiteDecisions(mine);
+        } catch { /* panel still opens; every row reads "Ask" */ }
+    };
+
+    const cycleSitePermission = async (permission: string): Promise<void> => {
+        if (!siteOrigin) return;
+        const key = `${siteOrigin}|${permission}`;
+        const next = cycleDecision(siteDecisions[key] || 'ask');
+        const result = await window.electronAPI?.setSitePermission?.(siteOrigin, permission, next);
+        if (result && !result.ok) return;
+        setSiteDecisions(prev => {
+            const copy = { ...prev };
+            if (next === 'ask') delete copy[key];
+            else copy[key] = next;
+            return copy;
+        });
+    };
+
     const splitCandidates = tabs.filter(tab => tab.id !== tabId && tab.type === 'browser');
     const isSecure = url.startsWith('https://');
     const isExternal = /^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(url || inputValue);
@@ -267,9 +310,62 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             </div>
 
             <form onSubmit={handleSubmit} className={`address-form ${isSecure ? 'secure' : ''} ${isExternal ? 'external' : ''}`}>
-                <span className="security-indicator" title={isSecure ? 'Secure connection' : isExternal ? 'External protocol' : 'Search or normal connection'}>
-                    {isSecure ? <Lock size={13} /> : isExternal ? <Globe size={13} /> : <Search size={14} />}
-                </span>
+                {siteOrigin ? (
+                    <div className="siteinfo-menu-wrap">
+                        <button
+                            type="button"
+                            className={`security-indicator ${siteInfoOpen ? 'open' : ''} ${isSecure ? '' : 'amber'}`}
+                            onClick={() => { void refreshSiteDecisions(); setSiteInfoOpen(v => !v); setBookmarksOpen(false); setToolsOpen(false); setSplitOpen(false); setDownloadsOpen(false); setHistoryOpen(false); }}
+                            title="Site information"
+                            aria-expanded={siteInfoOpen}
+                        >
+                            {isSecure ? <Lock size={13} /> : <ShieldAlert size={13} />}
+                        </button>
+                        {siteInfoOpen && (
+                            <div className="siteinfo-popover" role="dialog" aria-label="Site information">
+                                <div className={`siteinfo-connection ${isSecure ? 'secure' : 'insecure'}`}>
+                                    {isSecure ? <Lock size={15} /> : <ShieldAlert size={15} />}
+                                    <div>
+                                        <strong>{isSecure ? 'Connection is secure' : 'Connection is not secure'}</strong>
+                                        <span>
+                                            {isSecure
+                                                ? `Standard TLS encryption on ${siteOrigin.replace('https://', '')}.`
+                                                : 'This site does not encrypt traffic. Do not enter passwords here.'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="siteinfo-permissions">
+                                    <strong>Permissions for {siteOrigin.replace(/^https?:\/\//, '')}</strong>
+                                    <span className="siteinfo-hint">Click a value to cycle Ask → Allow → Block. Changes apply on reload.</span>
+                                    {SITE_INFO_PERMISSIONS.map(permission => {
+                                        const decision: PermissionResolution = siteDecisions[`${siteOrigin}|${permission}`] || 'ask';
+                                        return (
+                                            <div key={permission} className="siteinfo-row">
+                                                <span>{permissionPanelLabel(permission)}</span>
+                                                <button
+                                                    className={`decision-chip ${decisionChipClass(decision)}`}
+                                                    onClick={() => { void cycleSitePermission(permission); }}
+                                                    title={`Cycle decision for ${permissionPanelLabel(permission)}`}
+                                                >
+                                                    {decision === 'allow' ? 'Allow' : decision === 'block' ? 'Block' : 'Ask'}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <footer className="popover-footer">
+                                    <button onClick={() => { setSiteInfoOpen(false); onOpenSettings?.(); }} title="Open Settings → Site permissions">
+                                        <Shield size={13} /> Manage all site permissions
+                                    </button>
+                                </footer>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <span className="security-indicator" title={isSecure ? 'Secure connection' : isExternal ? 'External protocol' : 'Search or normal connection'}>
+                        {isSecure ? <Lock size={13} /> : isExternal ? <Globe size={13} /> : <Search size={14} />}
+                    </span>
+                )}
                 <span className="address-host-pill">{getHostLabel()}</span>
                 <input
                     ref={inputRef}

@@ -135,6 +135,7 @@ declare global {
         resolvePermission: (requestId: string, decision: 'allow' | 'block', remember: boolean) => Promise<boolean>;
         getSitePermissions: () => Promise<HooSitePermissionRow[]>;
         clearSitePermissions: (key?: string) => Promise<void>;
+        setSitePermission: (origin: string, permission: string, decision: 'allow' | 'block' | 'ask') => Promise<{ ok: boolean; error?: string }>;
         getSiteZooms: () => Promise<Record<string, number>>;
         clearSiteZooms: () => Promise<void>;
         restoreCrashedTabs: () => Promise<number>;

@@ -7,6 +7,8 @@ import {
     resolvePermissionDecision,
     withDecision,
     withoutDecision,
+    cycleDecision,
+    permissionPanelLabel,
     permissionRows,
     DECIDABLE_PERMISSIONS
 } from '../permissions';
@@ -148,5 +150,21 @@ describe('DECIDABLE_PERMISSIONS', () => {
         for (const needed of ['media', 'geolocation', 'notifications']) {
             expect(DECIDABLE_PERMISSIONS).toContain(needed);
         }
+    });
+});
+
+describe('cycleDecision', () => {
+    it('walks Ask -> Allow -> Block -> Ask', () => {
+        expect(cycleDecision('ask')).toBe('allow');
+        expect(cycleDecision('allow')).toBe('block');
+        expect(cycleDecision('block')).toBe('ask');
+    });
+});
+
+describe('permissionPanelLabel', () => {
+    it('names the capabilities a person recognizes', () => {
+        expect(permissionPanelLabel('media')).toBe('Camera and microphone');
+        expect(permissionPanelLabel('geolocation')).toBe('Location');
+        expect(permissionPanelLabel('something-else')).toBe('something-else');
     });
 });

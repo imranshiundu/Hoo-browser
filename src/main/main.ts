@@ -13,7 +13,7 @@ import { shouldBlockForLowData } from "./network-policy";
 import { setupDownloadManager, openDownloadFolder } from "./download-manager";
 import { setupBrowserContextMenu } from "./browser-context-menu";
 import { createTabIdFactory, stepZoomFactor, zoomPercent, crashReasonLabel, reorderTabsByIds, clampWindowState } from "./tab-utils";
-import { originFromUrl, decisionKey, describePermission, resolvePermissionDecision, permissionRows } from "./permissions";
+import { originFromUrl, decisionKey, describePermission, resolvePermissionDecision, permissionRows, withDecision, withoutDecision, DECIDABLE_PERMISSIONS } from "./permissions";
 import { serializeNetscapeBookmarks, parseNetscapeBookmarks } from "./bookmarks-io";
 import { zoomPercentToFactor } from "./zoom-store";
 
@@ -1197,6 +1197,22 @@ ipcMain.handle('get-site-permissions', async (): Promise<any[]> => permissionRow
 
 ipcMain.handle('clear-site-permissions', async (_event, key?: string): Promise<void> => {
     StorageService.clearPermissionDecisions(typeof key === 'string' && key ? key : undefined);
+});
+
+// The padlock panel's per-site toggles: Allow / Block / Ask for one
+// origin+permission pair. 'ask' removes the stored decision so the site
+// prompts again. Invalid input is rejected rather than silently stored.
+ipcMain.handle('set-site-permission', async (_event, origin: string, permission: string, decision: 'allow' | 'block' | 'ask'): Promise<{ ok: boolean; error?: string }> => {
+    if (!origin || originFromUrl(origin) !== origin) return { ok: false, error: 'Invalid site origin.' };
+    if (!(DECIDABLE_PERMISSIONS as readonly string[]).includes(permission)) return { ok: false, error: 'Unknown permission.' };
+    if (decision !== 'allow' && decision !== 'block' && decision !== 'ask') return { ok: false, error: 'Invalid decision.' };
+    const data = StorageService.load();
+    const decisions = data.sitePermissions || {};
+    const next = decision === 'ask'
+        ? withoutDecision(decisions, decisionKey(origin, permission))
+        : withDecision(decisions, origin, permission, decision);
+    StorageService.save({ sitePermissions: next });
+    return { ok: true };
 });
 
 // ---- Site zoom levels ----------------------------------------------------

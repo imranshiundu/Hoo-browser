@@ -90,9 +90,12 @@ The current codebase includes working early versions of:
 - **automatic updates**: packaged installs (AppImage, deb, NSIS, DMG) check GitHub Releases at startup, download new versions in the background, and offer one-click "Restart to update" — with live progress in Settings. Source checkouts keep the git-based updater (pull, selective install, selective rebuild); copies that cannot self-update say so honestly and link to the releases page
 - **real internal pages** (like Chrome's `chrome://` pages): a full **Downloads page** (Ctrl+J, live progress, open file / show in folder, clear list), an honest **Modules & Extensions page** (every toggle is a real built-in privacy setting — no fake extension cards), and the **Live Reader** RSS page that fetches feeds through the main process (no third-party CORS proxy) with persistent custom feeds
 - **Firefox-style fullscreen**: when a page goes HTML5 fullscreen (YouTube's theater button, video players) or you press F11, the shell chrome gets out of the way entirely, a Firefox-like banner ("*youtube.com* is now full screen — Exit / Esc") appears and auto-hides, and slamming the pointer into the top edge slides a tab strip back down over the page so your tabs stay one click away; leaving a fullscreen tab (switching or closing it) drops the page out of fullscreen, like every real browser
+- **download toasts**: a bottom-right stack taps you on the shoulder when a download starts, finishes, or fails — with Open / Folder actions on the finished ones — while every silent progress tick stays out of the way
+- **site info panel**: click the padlock in the address bar to see the connection state ("Connection is secure" / an amber warning on plain HTTP) and cycle per-site permission decisions (Ask → Allow → Block) for the camera & microphone, location, notifications, screen recording and more — the same storage the permission prompts and Settings use
+- **tab hover previews**: hover a tab for a Firefox-style identity card (favicon, title, site, live loading state) with switch and close actions — honest title/URL content rather than fake thumbnails, since background tabs cannot be screenshotted in Electron
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service), `v0.7 Real Internal Pages` (Downloads page, honest Modules & Extensions page, Live Reader with main-process feed fetching and persistent custom feeds, home-page tool shortcuts), and `v0.8 Fullscreen Like Firefox` (HTML5 fullscreen + F11 immersive shell, auto-hiding site banner, top-edge tab strip reveal, dead-code purge) have shipped.
+The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service), `v0.7 Real Internal Pages` (Downloads page, honest Modules & Extensions page, Live Reader with main-process feed fetching and persistent custom feeds, home-page tool shortcuts), `v0.8 Fullscreen Like Firefox` (HTML5 fullscreen + F11 immersive shell, auto-hiding site banner, top-edge tab strip reveal, dead-code purge), and `v0.9 Polish Pass` (download toasts, padlock site-info panel with per-site permission cycling, tab hover preview cards) have shipped.
 
 ## Test suite
 
@@ -117,7 +120,7 @@ metadata the in-app updater consumes. So shipping a version is:
 
 ```bash
 # bump package.json first, then:
-git tag v0.8.0 && git push origin v0.8.0
+git tag v0.9.0 && git push origin v0.9.0
 ```
 
 Covered modules today:
@@ -136,6 +139,7 @@ Covered modules today:
 | `rss-feeds.ts` (renderer) | feed URL validation/normalization, custom feed persistence, default/custom merge with dedupe, corrupt-storage recovery |
 | `download-model.ts` (renderer) | download status text, size formatting, live record upsert semantics |
 | `fullscreen-model.ts` (renderer) | immersive-state resolution (active page vs background tab vs F11), fullscreen origin labels, chrome reveal/hide pointer edge zones |
+| `download-toast-model.ts` (renderer) | which download transitions deserve a toast (start/finish/fail, never progress ticks or cancels), stack capping, replacement and expiry |
 | `types.ts` (renderer) | privacy-preserving site-initial avatars used instead of third-party favicon services |
 | `branding assets` | the generated PNG/ICO/ICNS icon set exists so builds can never silently lose the app icon again |
 

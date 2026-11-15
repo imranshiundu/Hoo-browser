@@ -50,6 +50,28 @@ export function findStatusText(activeMatch: number | undefined, matches: number 
     return `${safeActive} of ${matches}`;
 }
 
+/**
+ * Heading and URL line for the tab hover preview card. Background views
+ * cannot be screenshotted in Electron, so the card is honest: it shows the
+ * page identity (title + URL), not a fake thumbnail.
+ */
+export function previewCardText(title: string | undefined, url: string | undefined): { heading: string; sub: string } {
+    const cleanUrl = (url || '').trim();
+    let host = '';
+    if (cleanUrl) {
+        try {
+            host = new URL(cleanUrl).hostname.replace(/^www\./, '');
+        } catch {
+            host = '';
+        }
+    }
+    const cleanTitle = (title || '').trim();
+    // The placeholder title is meaningless once a URL exists — show the site.
+    const heading = cleanTitle && cleanTitle !== 'Loading...' ? cleanTitle : (host || cleanUrl || 'New Tab');
+    const sub = host && heading !== host ? host : (cleanUrl && cleanUrl.startsWith('http') ? cleanUrl : '');
+    return { heading, sub };
+}
+
 /** Friendly label for a renderer crash reason (shown on the crashed-tab page). */
 export function crashReasonLabel(reason: string): string {
     const labels: Record<string, string> = {

@@ -2,6 +2,7 @@ import React from 'react';
 import './TabStrip.css';
 import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw, BookmarkPlus, History, Layers, Trash2, Volume2, VolumeX, Home } from 'lucide-react';
 import { Tab, siteInitial, siteInitialStyle } from '../types';
+import { previewCardText } from '../../main/tab-utils';
 
 interface TabStripProps {
     tabs: Tab[];
@@ -31,6 +32,13 @@ interface TabStripProps {
 const MENU_WIDTH = 224;
 const MENU_MAX_HEIGHT = 320;
 const TOOLBAR_SAFE_TOP = 78;
+
+const PREVIEW_WIDTH = 280;
+const PREVIEW_HEIGHT = 120;
+/** Firefox-like delay so scanning the strip does not flash cards everywhere. */
+const HOVER_PREVIEW_DELAY_MS = 600;
+/** Grace period when moving from the tab to the card below it. */
+const HOVER_PREVIEW_GRACE_MS = 150;
 
 const clampMenuPosition = (x: number, y: number, width = MENU_WIDTH, height = MENU_MAX_HEIGHT): { left: number; top: number } => ({
     left: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
@@ -68,6 +76,10 @@ const TabStrip: React.FC<TabStripProps> = ({
     // Drag-to-reorder: the tab being dragged and the tab currently hovered over.
     const [dragTabId, setDragTabId] = React.useState<string | null>(null);
     const [dragOverId, setDragOverId] = React.useState<string | null>(null);
+    // Hover preview card: which tab, and where to anchor it (below the tab).
+    const [hoverPreview, setHoverPreview] = React.useState<{ tabId: string; left: number; top: number } | null>(null);
+    const hoverTimer = React.useRef<number | null>(null);
+    const hoverHideTimer = React.useRef<number | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
     const activeTabRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -75,10 +87,48 @@ const TabStrip: React.FC<TabStripProps> = ({
         activeTabRef.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }, [activeTabId, tabs.length]);
 
+    React.useEffect(() => () => {
+        if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+        if (hoverHideTimer.current) window.clearTimeout(hoverHideTimer.current);
+    }, []);
+
+    const clearHoverTimers = (): void => {
+        if (hoverTimer.current) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+    };
+
+    const scheduleHoverPreview = (tabId: string, element: HTMLElement): void => {
+        clearHoverTimers();
+        if (hoverHideTimer.current) { window.clearTimeout(hoverHideTimer.current); hoverHideTimer.current = null; }
+        if (editingId === tabId) return;
+        hoverTimer.current = window.setTimeout((): void => {
+            const rect = element.getBoundingClientRect();
+            const { left, top } = clampMenuPosition(rect.left, rect.bottom + 6, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+            setHoverPreview({ tabId, left, top });
+        }, HOVER_PREVIEW_DELAY_MS);
+    };
+
+    const cancelHoverPreview = (): void => {
+        clearHoverTimers();
+        if (hoverHideTimer.current) window.clearTimeout(hoverHideTimer.current);
+        hoverHideTimer.current = window.setTimeout((): void => setHoverPreview(null), HOVER_PREVIEW_GRACE_MS);
+    };
+
+    const keepHoverPreview = (): void => {
+        clearHoverTimers();
+        if (hoverHideTimer.current) { window.clearTimeout(hoverHideTimer.current); hoverHideTimer.current = null; }
+    };
+
+    const hideHoverPreviewNow = (): void => {
+        clearHoverTimers();
+        if (hoverHideTimer.current) { window.clearTimeout(hoverHideTimer.current); hoverHideTimer.current = null; }
+        setHoverPreview(null);
+    };
+
     React.useEffect(() => {
         const close = () => {
             setContextMenu(null);
             setNewTabMenu(null);
+            setHoverPreview(null);
         };
         const closeOnEscape = (event: KeyboardEvent) => {
             if (event.key === 'Escape') close();
@@ -240,6 +290,10 @@ const TabStrip: React.FC<TabStripProps> = ({
     const contextPosition = contextMenu ? clampMenuPosition(contextMenu.x, contextMenu.y) : null;
     const newTabPosition = newTabMenu ? clampMenuPosition(newTabMenu.x, newTabMenu.y, MENU_WIDTH, 260) : null;
 
+    const previewTab = hoverPreview ? tabs.find(tab => tab.id === hoverPreview.tabId) : null;
+    const previewMeta = previewTab ? previewCardText(previewTab.title, previewTab.url) : null;
+    const previewCanClose = previewTab ? !pinnedTabIds.includes(previewTab.id) : false;
+
     const renderTabIcon = (tab: Tab): React.ReactNode => {
         if (loadingIds[tab.id]) return <span className="tab-spinner" aria-label="Loading" />;
         if (tab.type === 'home') return <Home size={15} className="tab-favicon" />;
@@ -279,7 +333,9 @@ const TabStrip: React.FC<TabStripProps> = ({
                             key={tab.id}
                             ref={isActive ? activeTabRef : undefined}
                             className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''} ${loadingIds[tab.id] ? 'loading' : ''} ${dragTabId === tab.id ? 'dragging' : ''} ${dragOverId === tab.id && dragTabId && dragTabId !== tab.id ? 'drag-over' : ''}`}
-                            onClick={() => onSwitchTab(tab.id)}
+                            onClick={() => { hideHoverPreviewNow(); onSwitchTab(tab.id); }}
+                            onMouseEnter={(e) => scheduleHoverPreview(tab.id, e.currentTarget)}
+                            onMouseLeave={cancelHoverPreview}
                             onDoubleClick={(e) => startEditing(e, tab)}
                             onContextMenu={(e) => void openContextMenu(e, tab.id)}
                             draggable={!editingId}
@@ -303,7 +359,7 @@ const TabStrip: React.FC<TabStripProps> = ({
                                     onCloseTab(tab.id);
                                 }
                             }}
-                            title={tab.title}
+                            aria-describedby={hoverPreview?.tabId === tab.id ? 'tab-hover-preview' : undefined}
                         >
                             {isPinned && <Pin size={10} className="pin-indicator" />}
                             {renderTabIcon(tab)}
@@ -357,6 +413,39 @@ const TabStrip: React.FC<TabStripProps> = ({
                     <button disabled={!hasDuplicateTabs} onClick={() => runMenuAction(() => onCloseDuplicateTabs?.())}><Trash2 size={14} /> Close duplicate tabs</button>
                     <span className="tab-context-divider" />
                     <button onClick={() => runMenuAction(() => navigator.clipboard?.writeText(tabs.filter(t => t.type === 'browser').map(t => t.url).join('\n')))}><Layers size={14} /> Copy all tab URLs</button>
+                </div>
+            )}
+
+            {/* Hover preview card. Background tabs cannot be screenshotted in
+                Electron, so this is an honest identity card — title, site,
+                live favicon — not a fake page thumbnail. */}
+            {hoverPreview && previewTab && previewMeta && (
+                <div
+                    id="tab-hover-preview"
+                    role="tooltip"
+                    className="tab-hover-card"
+                    style={{ left: hoverPreview.left, top: hoverPreview.top }}
+                    onMouseEnter={keepHoverPreview}
+                    onMouseLeave={cancelHoverPreview}
+                    onClick={(event) => { event.stopPropagation(); hideHoverPreviewNow(); onSwitchTab(previewTab.id); }}
+                >
+                    <div className="tab-hover-card-head">
+                        <span className="tab-hover-card-icon">{renderTabIcon(previewTab)}</span>
+                        <span className="tab-hover-card-title">{previewMeta.heading}</span>
+                        {previewCanClose && (
+                            <button
+                                className="tab-hover-card-close"
+                                onClick={(event) => { event.stopPropagation(); hideHoverPreviewNow(); onCloseTab(previewTab.id); }}
+                                title="Close tab"
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
+                    </div>
+                    {previewMeta.sub && <span className="tab-hover-card-sub">{previewMeta.sub}</span>}
+                    <span className="tab-hover-card-state">
+                        {loadingIds[previewTab.id] ? 'Loading…' : previewTab.id === activeTabId ? 'Current tab' : 'Click to switch'}
+                    </span>
                 </div>
             )}
         </div>

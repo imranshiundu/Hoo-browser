@@ -49,6 +49,34 @@ export function describePermission(permission: string): string {
     return PERMISSION_LABELS[permission] || `use ${permission}`;
 }
 
+/** Compact capability names for the padlock panel and settings rows. */
+const PERMISSION_PANEL_LABELS: Record<string, string> = {
+    'media': 'Camera and microphone',
+    'geolocation': 'Location',
+    'notifications': 'Notifications',
+    'clipboard-sanitized-read': 'Clipboard read',
+    'midi': 'MIDI devices',
+    'pointerLock': 'Mouse lock',
+    'fullscreen': 'Fullscreen',
+    'display-capture': 'Screen recording'
+};
+
+/** Short capability label, e.g. for the site-info panel rows. */
+export function permissionPanelLabel(permission: string): string {
+    return PERMISSION_PANEL_LABELS[permission] || permission;
+}
+
+/**
+ * Cycle one site's decision the way the padlock panel does: Ask → Allow →
+ * Block → Ask. 'Ask' is not stored in the profile, so it only ever appears
+ * as the absence of a decision.
+ */
+export function cycleDecision(decision: PermissionResolution): PermissionResolution {
+    if (decision === 'ask') return 'allow';
+    if (decision === 'allow') return 'block';
+    return 'ask';
+}
+
 /**
  * Origin used for permission keys. Permissions are per-site in real
  * browsers, not per-page: `https://meet.google.com/abc/def` and any other
