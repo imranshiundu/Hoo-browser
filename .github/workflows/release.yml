@@ -48,6 +48,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # dist/ is gitignored, so the webpack production bundle must be produced
+      # here — electron-builder packs dist/**/* into the asar and refuses to
+      # ship an app whose dist/main/main.js does not exist.
+      - name: Build production bundles
+        run: npm run build:prod
+
       # Real packaging needs the real Electron binary, so unlike ci.yml there is
       # no ELECTRON_SKIP_BINARY_DOWNLOAD here. --publish never keeps
       # electron-builder from publishing on its own; the publish job below owns
