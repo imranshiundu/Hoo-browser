@@ -16,6 +16,7 @@ import { createTabIdFactory, stepZoomFactor, zoomPercent, crashReasonLabel, reor
 import { originFromUrl, decisionKey, describePermission, resolvePermissionDecision, permissionRows, withDecision, withoutDecision, DECIDABLE_PERMISSIONS } from "./permissions";
 import { serializeNetscapeBookmarks, parseNetscapeBookmarks } from "./bookmarks-io";
 import { zoomPercentToFactor } from "./zoom-store";
+import { SuggestService } from "./suggest-service";
 
 app.setName("Hoo Browser");
 // One browser, one process. A second `hoo-browser` launch now focuses the
@@ -758,6 +759,10 @@ ipcMain.handle('show-tab-menu', async (_event, payload: {
     canClose?: boolean;
     canSplit?: boolean;
     hasTabsToRight?: boolean;
+    /** Groups this tab could join (its own group excluded). */
+    joinableGroups?: Array<{ id: string; name: string; color: string }>;
+    /** Set when the tab already belongs to a group. */
+    inGroupName?: string;
 }): Promise<string | null> => {
     if (!mainWindow) return null;
     return new Promise((resolve): void => {
@@ -767,11 +772,32 @@ ipcMain.handle('show-tab-menu', async (_event, payload: {
             done = true;
             resolve(action);
         };
+        // Firefox's "Add Tab to New Group" lives at the top of the tab menu.
+        const groupItems: Electron.MenuItemConstructorOptions[] = [];
+        if (payload.inGroupName) {
+            groupItems.push({ label: `Remove from “${payload.inGroupName}”`, click: () => choose('ungroup') });
+        }
+        const joinable = payload.joinableGroups || [];
+        if (joinable.length) {
+            groupItems.push({
+                label: 'Add tab to group',
+                submenu: joinable.map(group => ({
+                    label: group.name,
+                    click: () => choose(`group:${group.id}`)
+                }))
+            });
+        }
+        if (groupItems.length) {
+            groupItems.push({ type: 'separator' } as Electron.MenuItemConstructorOptions);
+        }
         const template: Electron.MenuItemConstructorOptions[] = [
             { label: payload.isPinned ? 'Unpin tab' : 'Pin tab', click: () => choose('toggle-pin') },
             { label: 'Duplicate tab', enabled: !!payload.url, click: () => choose('duplicate') },
             { label: 'Open in split screen', enabled: !!payload.canSplit, click: () => choose('split') },
             { label: 'Copy tab URL', enabled: !!payload.url, click: () => { if (payload.url) clipboard.writeText(payload.url); choose('copy-url'); } },
+            { type: 'separator' },
+            ...groupItems,
+            { label: payload.inGroupName ? 'New group with this tab' : 'Add tab to new group', click: () => choose('group-new') },
             { type: 'separator' },
             { label: 'Close other tabs', click: () => choose('close-others') },
             { label: 'Close tabs to the right', enabled: !!payload.hasTabsToRight, click: () => choose('close-right') },
@@ -1176,9 +1202,53 @@ ipcMain.handle('get-history', async (): Promise<any[]> => {
     return [...(data.history || [])].slice(-60).reverse();
 });
 
+// Full history for the Library-style history page (newest first).
+ipcMain.handle('get-all-history', async (): Promise<any[]> => {
+    const data = StorageService.load();
+    return [...(data.history || [])].reverse();
+});
+
+// Remove one visit (timestamp + url disambiguate repeat visits).
+ipcMain.handle('delete-history-entry', async (_event, url: string, timestamp: number): Promise<number> => {
+    const data = StorageService.load();
+    const before = (data.history || []).length;
+    const next = (data.history || []).filter(entry => !(entry.url === url && entry.timestamp === timestamp));
+    if (next.length !== before) StorageService.save({ history: next });
+    return before - next.length;
+});
+
+// "Forget" a range: last hour, today, or everything (hours = null).
+ipcMain.handle('clear-history-range', async (_event, range: 'hour' | 'day' | 'all'): Promise<number> => {
+    if (range === 'all') {
+        const data = StorageService.load();
+        const removed = (data.history || []).length;
+        StorageService.clearAllHistory();
+        sendToShell('history-cleared');
+        return removed;
+    }
+    const now = Date.now();
+    const cutoff = range === 'hour' ? now - 3600000 : (() => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+    const data = StorageService.load();
+    const before = (data.history || []).length;
+    const next = (data.history || []).filter(entry => entry.timestamp < cutoff);
+    if (next.length !== before) StorageService.save({ history: next });
+    sendToShell('history-cleared');
+    return before - next.length;
+});
+
 ipcMain.handle('clear-history', async (): Promise<void> => {
     StorageService.clearAllHistory();
     sendToShell('history-cleared');
+});
+
+// ---- Address bar suggestions (DuckDuckGo autocomplete) --------------------
+// Main-process only: the renderer never talks to the network for this, and
+// the request carries nothing but the typed characters.
+const suggestService = new SuggestService();
+
+ipcMain.handle('get-address-suggestions', async (_event, query: string): Promise<{ ok: boolean; suggestions: string[] }> => {
+    const result = await suggestService.suggest(typeof query === 'string' ? query : '');
+    return { ok: result.ok, suggestions: result.suggestions };
 });
 
 // ---- Site permissions ----------------------------------------------------
@@ -1351,6 +1421,7 @@ function setupAppMenu(): void {
                 { label: 'Reopen Closed Tab', accelerator: 'CmdOrCtrl+Shift+T', click: (): void => sendUiShortcut('reopen-closed') },
                 { type: 'separator' },
                 { label: 'Bookmark Manager', accelerator: 'CmdOrCtrl+Shift+O', click: (): void => sendUiShortcut('open-library') },
+                { label: 'History', accelerator: 'CmdOrCtrl+H', click: (): void => sendUiShortcut('history-page') },
                 { label: 'Downloads', accelerator: 'CmdOrCtrl+J', click: (): void => sendUiShortcut('downloads') },
                 { label: 'RSS Reader', click: (): void => sendUiShortcut('open-reader') },
                 { label: 'Modules & Extensions', click: (): void => sendUiShortcut('open-extensions') },

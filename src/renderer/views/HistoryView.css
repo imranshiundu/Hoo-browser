@@ -1,0 +1,225 @@
+/* History page — Firefox Library "History" look, Hoo palette. */
+
+.history-view {
+    padding: 40px;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    animation: fadeIn 0.4s ease;
+}
+
+.history-clear-wrap {
+    position: relative;
+}
+
+.history-clear-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.history-clear-btn:hover {
+    color: #ff9b5a;
+    border-color: rgba(255, 155, 90, 0.4);
+}
+
+.history-clear-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--bg-secondary, #1c2030);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+.history-clear-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.history-clear-menu button:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.history-clear-menu button.danger:hover {
+    background: rgba(255, 84, 84, 0.14);
+    color: #ff8080;
+}
+
+.history-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 22px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+}
+
+.history-search-bar input {
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13.5px;
+}
+
+.history-search-bar button {
+    display: flex;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 6px;
+}
+
+.history-search-bar button:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.history-day-list {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+}
+
+.history-day-label {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #ff9b5a;
+}
+
+.history-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 10px;
+    border-radius: 10px;
+}
+
+.history-row:hover {
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.history-time {
+    flex: 0 0 52px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.history-entry {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+}
+
+.history-entry-title {
+    flex: 0 1 auto;
+    font-size: 13.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-entry:hover .history-entry-title {
+    color: #ffb28a;
+    text-decoration: underline;
+}
+
+.history-entry-url {
+    flex: 1 1 24ch;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.history-forget-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.history-row:hover .history-forget-btn {
+    opacity: 1;
+}
+
+.history-forget-btn:hover {
+    background: rgba(255, 84, 84, 0.16);
+    color: #ff8080;
+}
+
+.history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 80px 20px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.history-empty p {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.history-empty span {
+    max-width: 400px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}

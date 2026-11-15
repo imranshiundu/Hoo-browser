@@ -1,8 +1,15 @@
 import React from 'react';
 import './TabStrip.css';
-import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw, BookmarkPlus, History, Layers, Trash2, Volume2, VolumeX, Home } from 'lucide-react';
+import { X, Plus, Globe, Columns, Pin, Copy, PanelRight, RotateCcw, BookmarkPlus, History, Layers, Trash2, Volume2, VolumeX, Home, ChevronsLeftRight, ChevronRight, ChevronDown, Palette } from 'lucide-react';
 import { Tab, siteInitial, siteInitialStyle } from '../types';
 import { previewCardText } from '../../main/tab-utils';
+import {
+    GROUP_COLORS,
+    TabGroup,
+    TabGroupColor,
+    groupOf
+} from '../../main/tab-groups';
+import { isStripOverflowing, overflowRowLabel } from '../../main/tab-overflow';
 
 interface TabStripProps {
     tabs: Tab[];
@@ -14,6 +21,7 @@ interface TabStripProps {
     favicons?: Record<string, string>;
     audibleTabs?: Record<string, boolean>;
     mutedTabs?: Record<string, boolean>;
+    tabGroups?: TabGroup[];
     onSwitchTab: (id: string) => void;
     onSplitTab: (id: string) => void;
     onCloseTab: (id: string) => void;
@@ -27,6 +35,13 @@ interface TabStripProps {
     onReopenClosedTab?: () => void;
     onBookmarkAllTabs?: () => void;
     onCloseDuplicateTabs?: () => void;
+    onAddTabToGroup?: (tabId: string, groupId: string | null) => void;
+    onRemoveTabFromGroup?: (tabId: string) => void;
+    onRenameGroup?: (groupId: string, name: string) => void;
+    onRecolorGroup?: (groupId: string, color: TabGroupColor) => void;
+    onToggleGroupCollapse?: (groupId: string) => void;
+    onUngroupGroup?: (groupId: string) => void;
+    onDropTabOnGroup?: (tabId: string, groupId: string) => void;
 }
 
 const MENU_WIDTH = 224;
@@ -39,6 +54,17 @@ const PREVIEW_HEIGHT = 120;
 const HOVER_PREVIEW_DELAY_MS = 600;
 /** Grace period when moving from the tab to the card below it. */
 const HOVER_PREVIEW_GRACE_MS = 150;
+
+export const GROUP_COLOR_HEX: Record<TabGroupColor, string> = {
+    blue: '#4c8dff',
+    purple: '#a06bff',
+    cyan: '#22c1dc',
+    green: '#3fb950',
+    yellow: '#d9a406',
+    orange: '#f0883e',
+    red: '#e5534b',
+    pink: '#e8559c'
+};
 
 const clampMenuPosition = (x: number, y: number, width = MENU_WIDTH, height = MENU_MAX_HEIGHT): { left: number; top: number } => ({
     left: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
@@ -55,6 +81,7 @@ const TabStrip: React.FC<TabStripProps> = ({
     favicons = {},
     audibleTabs = {},
     mutedTabs = {},
+    tabGroups = [],
     onSwitchTab,
     onSplitTab,
     onCloseTab,
@@ -67,17 +94,31 @@ const TabStrip: React.FC<TabStripProps> = ({
     onTogglePinTab,
     onReopenClosedTab,
     onBookmarkAllTabs,
-    onCloseDuplicateTabs
+    onCloseDuplicateTabs,
+    onAddTabToGroup,
+    onRemoveTabFromGroup,
+    onRenameGroup,
+    onRecolorGroup,
+    onToggleGroupCollapse,
+    onUngroupGroup,
+    onDropTabOnGroup
 }) => {
     const [editingId, setEditingId] = React.useState<string | null>(null);
     const [editValue, setEditValue] = React.useState('');
     const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; tabId: string } | null>(null);
     const [newTabMenu, setNewTabMenu] = React.useState<{ x: number; y: number } | null>(null);
+    const [groupMenu, setGroupMenu] = React.useState<{ x: number; y: number; groupId: string } | null>(null);
+    const [renamingGroupId, setRenamingGroupId] = React.useState<string | null>(null);
+    const [groupNameValue, setGroupNameValue] = React.useState('');
     // Drag-to-reorder: the tab being dragged and the tab currently hovered over.
     const [dragTabId, setDragTabId] = React.useState<string | null>(null);
     const [dragOverId, setDragOverId] = React.useState<string | null>(null);
+    const [dragOverGroupId, setDragOverGroupId] = React.useState<string | null>(null);
     // Hover preview card: which tab, and where to anchor it (below the tab).
     const [hoverPreview, setHoverPreview] = React.useState<{ tabId: string; left: number; top: number } | null>(null);
+    // Firefox "List all tabs": appears when the strip overflows.
+    const [overflowed, setOverflowed] = React.useState(false);
+    const [overflowMenuOpen, setOverflowMenuOpen] = React.useState(false);
     const hoverTimer = React.useRef<number | null>(null);
     const hoverHideTimer = React.useRef<number | null>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -91,6 +132,18 @@ const TabStrip: React.FC<TabStripProps> = ({
         if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
         if (hoverHideTimer.current) window.clearTimeout(hoverHideTimer.current);
     }, []);
+
+    // Measure the strip: when the tabs' combined width passes the visible
+    // box, the list-all-tabs chevron appears — Firefox's classic move.
+    React.useEffect(() => {
+        const element = containerRef.current;
+        if (!element) return;
+        const update = (): void => setOverflowed(isStripOverflowing(element.scrollWidth, element.clientWidth));
+        update();
+        const observer = new ResizeObserver(update);
+        observer.observe(element);
+        return () => observer.disconnect();
+    }, [tabs, tabGroups, pinnedTabIds]);
 
     const clearHoverTimers = (): void => {
         if (hoverTimer.current) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
@@ -109,7 +162,7 @@ const TabStrip: React.FC<TabStripProps> = ({
 
     const cancelHoverPreview = (): void => {
         clearHoverTimers();
-        if (hoverHideTimer.current) window.clearTimeout(hoverHideTimer.current);
+        if (hoverHideTimer.current) { window.clearTimeout(hoverHideTimer.current); hoverHideTimer.current = null; }
         hoverHideTimer.current = window.setTimeout((): void => setHoverPreview(null), HOVER_PREVIEW_GRACE_MS);
     };
 
@@ -128,6 +181,8 @@ const TabStrip: React.FC<TabStripProps> = ({
         const close = () => {
             setContextMenu(null);
             setNewTabMenu(null);
+            setGroupMenu(null);
+            setOverflowMenuOpen(false);
             setHoverPreview(null);
         };
         const closeOnEscape = (event: KeyboardEvent) => {
@@ -155,6 +210,22 @@ const TabStrip: React.FC<TabStripProps> = ({
             await window.electronAPI.renameTab(tabId, editValue.trim());
         }
         setEditingId(null);
+    };
+
+    const startGroupRename = (group: TabGroup): void => {
+        setRenamingGroupId(group.id);
+        setGroupNameValue(group.name);
+    };
+
+    const submitGroupRename = (groupId: string): void => {
+        if (groupNameValue.trim()) onRenameGroup?.(groupId, groupNameValue.trim());
+        setRenamingGroupId(null);
+    };
+
+    const cycleGroupColor = (group: TabGroup): void => {
+        const index = GROUP_COLORS.indexOf(group.color);
+        const next = GROUP_COLORS[(index + 1) % GROUP_COLORS.length];
+        onRecolorGroup?.(group.id, next);
     };
 
     const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
@@ -198,6 +269,7 @@ const TabStrip: React.FC<TabStripProps> = ({
     const endDrag = (): void => {
         setDragTabId(null);
         setDragOverId(null);
+        setDragOverGroupId(null);
     };
 
     const executeTabAction = (action: string | null, tab: Tab) => {
@@ -208,6 +280,10 @@ const TabStrip: React.FC<TabStripProps> = ({
         if (action === 'close-others') onCloseOtherTabs?.(tab.id);
         if (action === 'close-right') onCloseTabsToRight?.(tab.id);
         if (action === 'close') onCloseTab(tab.id);
+        if (action === 'ungroup') onRemoveTabFromGroup?.(tab.id);
+        if (action === 'group-new') onAddTabToGroup?.(tab.id, null);
+        const groupJoin = /^group:(.+)$/.exec(action);
+        if (groupJoin) onAddTabToGroup?.(tab.id, groupJoin[1]);
     };
 
     const executeNewTabAction = (action: string | null) => {
@@ -225,6 +301,7 @@ const TabStrip: React.FC<TabStripProps> = ({
         event.preventDefault();
         event.stopPropagation();
         setNewTabMenu(null);
+        setGroupMenu(null);
 
         const tab = tabs.find(candidate => candidate.id === tabId);
         if (!tab) return;
@@ -232,6 +309,10 @@ const TabStrip: React.FC<TabStripProps> = ({
         const contextIndex = tabs.findIndex(candidate => candidate.id === tabId);
         const isPinned = pinnedTabIds.includes(tabId);
         const hasTabsToRight = contextIndex >= 0 && tabs.slice(contextIndex + 1).some(candidate => !pinnedTabIds.includes(candidate.id));
+        const ownGroup = groupOf(tabGroups, tabId);
+        const joinableGroups = tabGroups
+            .filter(group => group.id !== ownGroup?.id)
+            .map(group => ({ id: group.id, name: group.name, color: group.color }));
 
         if (window.electronAPI?.showTabMenu) {
             const action = await window.electronAPI.showTabMenu({
@@ -244,7 +325,9 @@ const TabStrip: React.FC<TabStripProps> = ({
                 isActive: tabId === activeTabId,
                 canClose: !isPinned && (tabs.length > 1 || tab.type === 'browser'),
                 canSplit: tab.type === 'browser' && tabId !== activeTabId && tabId !== splitTabId,
-                hasTabsToRight
+                hasTabsToRight,
+                joinableGroups,
+                inGroupName: ownGroup?.name
             });
             executeTabAction(action, tab);
             return;
@@ -257,6 +340,7 @@ const TabStrip: React.FC<TabStripProps> = ({
         event.preventDefault();
         event.stopPropagation();
         setContextMenu(null);
+        setGroupMenu(null);
 
         const browserUrls = tabs.filter(tab => tab.type === 'browser').map(tab => tab.url).filter(Boolean);
         const hasDuplicateTabs = new Set(browserUrls).size < browserUrls.length;
@@ -275,10 +359,19 @@ const TabStrip: React.FC<TabStripProps> = ({
         setNewTabMenu({ x: event.clientX, y: event.clientY });
     };
 
+    const openGroupMenu = (event: React.MouseEvent, groupId: string) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setContextMenu(null);
+        setNewTabMenu(null);
+        setGroupMenu({ x: event.clientX, y: event.clientY, groupId });
+    };
+
     const runMenuAction = (action: () => void) => {
         action();
         setContextMenu(null);
         setNewTabMenu(null);
+        setGroupMenu(null);
     };
 
     const contextTab = contextMenu ? tabs.find(tab => tab.id === contextMenu.tabId) : null;
@@ -289,6 +382,8 @@ const TabStrip: React.FC<TabStripProps> = ({
     const hasDuplicateTabs = new Set(browserUrls).size < browserUrls.length;
     const contextPosition = contextMenu ? clampMenuPosition(contextMenu.x, contextMenu.y) : null;
     const newTabPosition = newTabMenu ? clampMenuPosition(newTabMenu.x, newTabMenu.y, MENU_WIDTH, 260) : null;
+    const groupMenuGroup = groupMenu ? tabGroups.find(group => group.id === groupMenu.groupId) : null;
+    const groupMenuPosition = groupMenu ? clampMenuPosition(groupMenu.x, groupMenu.y) : null;
 
     const previewTab = hoverPreview ? tabs.find(tab => tab.id === hoverPreview.tabId) : null;
     const previewMeta = previewTab ? previewCardText(previewTab.title, previewTab.url) : null;
@@ -321,18 +416,99 @@ const TabStrip: React.FC<TabStripProps> = ({
         );
     };
 
+    // The strip is built as an explicit item list: every group contributes a
+    // pill at its first member's position, and collapsed groups keep their
+    // pill visible even when every member is hidden (Firefox behavior).
+    type StripItem =
+        | { kind: 'pill'; key: string; group: TabGroup }
+        | { kind: 'tab'; key: string; tab: Tab; group: TabGroup | null };
+    const firstMemberIndex = new Map<string, number>();
+    orderedTabs.forEach((tab, index) => {
+        const group = groupOf(tabGroups, tab.id);
+        if (group && !firstMemberIndex.has(group.id)) firstMemberIndex.set(group.id, index);
+    });
+    const stripItems: StripItem[] = [];
+    const pillEmitted = new Set<string>();
+    orderedTabs.forEach((tab, index) => {
+        const group = groupOf(tabGroups, tab.id);
+        if (group && firstMemberIndex.get(group.id) === index && !pillEmitted.has(group.id)) {
+            stripItems.push({ kind: 'pill', key: `pill:${group.id}`, group });
+            pillEmitted.add(group.id);
+        }
+        // Collapsed groups hide members, except the active tab which stays.
+        if (!group?.collapsed || tab.id === activeTabId) {
+            stripItems.push({ kind: 'tab', key: tab.id, tab, group });
+        }
+    });
+    const contextOwnGroup = contextTab ? groupOf(tabGroups, contextTab.id) : null;
+    const contextJoinable = tabGroups
+        .filter(group => group.id !== contextOwnGroup?.id)
+        .map(group => ({ id: group.id, name: group.name, color: group.color }));
+
+    const renderGroupPill = (group: TabGroup): React.ReactNode => (
+        <div
+            key={`pill:${group.id}`}
+            className={`tab-group-pill ${group.collapsed ? 'collapsed' : ''} ${dragOverGroupId === group.id ? 'drag-over' : ''}`}
+            style={{ '--group-color': GROUP_COLOR_HEX[group.color] } as React.CSSProperties}
+            onClick={(e) => { e.stopPropagation(); onToggleGroupCollapse?.(group.id); }}
+            onDoubleClick={(e) => { e.stopPropagation(); startGroupRename(group); }}
+            onContextMenu={(e) => openGroupMenu(e, group.id)}
+            title={group.collapsed ? `Expand “${group.name}” (${group.tabIds.length} tabs)` : `Collapse “${group.name}” — double-click to rename`}
+            onDragOver={(e) => {
+                if (!dragTabId) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDragOverGroupId(group.id);
+            }}
+            onDragLeave={(e) => { e.stopPropagation(); setDragOverGroupId(prev => (prev === group.id ? null : prev)); }}
+            onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (dragTabId) onDropTabOnGroup?.(dragTabId, group.id);
+                endDrag();
+            }}
+        >
+            {renamingGroupId === group.id ? (
+                <input
+                    className="tab-group-rename-input"
+                    autoFocus
+                    value={groupNameValue}
+                    onChange={(e) => setGroupNameValue(e.target.value)}
+                    onBlur={() => submitGroupRename(group.id)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitGroupRename(group.id);
+                        if (e.key === 'Escape') setRenamingGroupId(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onDragOver={(e) => e.preventDefault()}
+                />
+            ) : (
+                <>
+                    <span className="tab-group-dot" aria-hidden="true" />
+                    {group.collapsed ? <ChevronRight size={11} className="tab-group-caret" /> : <ChevronDown size={11} className="tab-group-caret" />}
+                    <span className="tab-group-name">{group.name}</span>
+                    <span className="tab-group-count">{group.tabIds.length}</span>
+                </>
+            )}
+        </div>
+    );
+
     return (
         <div className="tab-strip">
-            <div className="tabs-container" ref={containerRef} onWheel={handleWheel}>
-                {orderedTabs.map(tab => {
+            <div className={`tabs-container ${overflowed ? 'overflowed' : ''}`} ref={containerRef} onWheel={handleWheel}>
+                {stripItems.map(item => {
+                    if (item.kind === 'pill') return renderGroupPill(item.group);
+                    const { tab, group } = item;
                     const isActive = tab.id === activeTabId;
                     const isPinned = pinnedTabIds.includes(tab.id);
                     const canClose = !isPinned && (tabs.length > 1 || tab.type === 'browser');
+                    const groupHex = group ? GROUP_COLOR_HEX[group.color] : undefined;
                     return (
                         <div
                             key={tab.id}
                             ref={isActive ? activeTabRef : undefined}
-                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''} ${loadingIds[tab.id] ? 'loading' : ''} ${dragTabId === tab.id ? 'dragging' : ''} ${dragOverId === tab.id && dragTabId && dragTabId !== tab.id ? 'drag-over' : ''}`}
+                            className={`tab-item ${isActive ? 'active' : ''} ${tab.id === splitTabId ? 'split' : ''} ${tab.type === 'home' ? 'home-tab' : ''} ${isPinned ? 'pinned' : ''} ${loadingIds[tab.id] ? 'loading' : ''} ${dragTabId === tab.id ? 'dragging' : ''} ${dragOverId === tab.id && dragTabId && dragTabId !== tab.id ? 'drag-over' : ''} ${group ? 'grouped' : ''}`}
+                            style={group ? ({ '--group-color': groupHex } as React.CSSProperties) : undefined}
                             onClick={() => { hideHoverPreviewNow(); onSwitchTab(tab.id); }}
                             onMouseEnter={(e) => scheduleHoverPreview(tab.id, e.currentTarget)}
                             onMouseLeave={cancelHoverPreview}
@@ -388,6 +564,17 @@ const TabStrip: React.FC<TabStripProps> = ({
                     );
                 })}
             </div>
+            {overflowed && (
+                <button
+                    className={`list-all-tabs-btn ${overflowMenuOpen ? 'open' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setOverflowMenuOpen(open => !open); }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    title="List all tabs"
+                    aria-label="List all tabs"
+                >
+                    <ChevronsLeftRight size={14} />
+                </button>
+            )}
             <button className="new-tab-btn" onClick={onCreateTab} onContextMenu={(e) => void openNewTabMenu(e)} title="New tab (Ctrl+T)">
                 <Plus size={17} />
             </button>
@@ -399,9 +586,58 @@ const TabStrip: React.FC<TabStripProps> = ({
                     {contextTab.type === 'browser' && contextTab.id !== activeTabId && <button onClick={() => runMenuAction(() => onSplitTab(contextTab.id))}><PanelRight size={14} /> Open in split screen</button>}
                     {contextTab.type === 'browser' && <button onClick={() => runMenuAction(() => navigator.clipboard?.writeText(contextTab.url || ''))}><Copy size={14} /> Copy tab URL</button>}
                     <span className="tab-context-divider" />
+                    {contextOwnGroup && (
+                        <button onClick={() => runMenuAction(() => onRemoveTabFromGroup?.(contextTab.id))}><X size={14} /> Remove from “{contextOwnGroup.name}”</button>
+                    )}
+                    {contextJoinable.length > 0 && (
+                        <div className="tab-context-submenu-wrap">
+                            <button className="submenu-anchor">Add tab to group <ChevronRight size={12} /></button>
+                            <div className="tab-context-submenu">
+                                {contextJoinable.map(group => (
+                                    <button key={group.id} onClick={() => runMenuAction(() => onAddTabToGroup?.(contextTab.id, group.id))}>
+                                        <span className="tab-group-dot" style={{ background: GROUP_COLOR_HEX[group.color as TabGroupColor] }} /> {group.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <button onClick={() => runMenuAction(() => onAddTabToGroup?.(contextTab.id, null))}><Layers size={14} /> {contextOwnGroup ? 'New group with this tab' : 'Add tab to new group'}</button>
+                    <span className="tab-context-divider" />
                     <button onClick={() => runMenuAction(() => onCloseOtherTabs?.(contextTab.id))}><RotateCcw size={14} /> Close other tabs</button>
                     <button disabled={!hasTabsToRight} onClick={() => runMenuAction(() => onCloseTabsToRight?.(contextTab.id))}><X size={14} /> Close tabs to the right</button>
                     <button disabled={contextPinned} onClick={() => runMenuAction(() => onCloseTab(contextTab.id))}><X size={14} /> Close tab</button>
+                </div>
+            )}
+
+            {groupMenu && groupMenuGroup && groupMenuPosition && (
+                <div className="tab-context-menu" style={{ left: groupMenuPosition.left, top: groupMenuPosition.top }} onClick={(event) => event.stopPropagation()}>
+                    <div className="tab-group-color-row" title="Cycle colors">
+                        <Palette size={14} />
+                        {GROUP_COLORS.map(color => (
+                            <button
+                                key={color}
+                                className={`group-color-swatch ${groupMenuGroup.color === color ? 'selected' : ''}`}
+                                style={{ background: GROUP_COLOR_HEX[color] }}
+                                onClick={() => runMenuAction(() => onRecolorGroup?.(groupMenuGroup.id, color))}
+                                aria-label={`Color ${color}`}
+                            />
+                        ))}
+                    </div>
+                    <span className="tab-context-divider" />
+                    <button onClick={() => { onToggleGroupCollapse?.(groupMenuGroup.id); setGroupMenu(null); }}>
+                        {groupMenuGroup.collapsed ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {groupMenuGroup.collapsed ? 'Expand group' : 'Collapse group'}
+                    </button>
+                    <button onClick={() => { startGroupRename(groupMenuGroup); setGroupMenu(null); }}>Rename group</button>
+                    <button onClick={() => runMenuAction(() => onUngroupGroup?.(groupMenuGroup.id))}><X size={14} /> Ungroup tabs</button>
+                    <span className="tab-context-divider" />
+                    <button
+                        onClick={() => {
+                            groupMenuGroup.tabIds.forEach(tabId => onCloseTab(tabId));
+                            setGroupMenu(null);
+                        }}
+                    >
+                        <Trash2 size={14} /> Close group ({groupMenuGroup.tabIds.length})
+                    </button>
                 </div>
             )}
 
@@ -413,6 +649,34 @@ const TabStrip: React.FC<TabStripProps> = ({
                     <button disabled={!hasDuplicateTabs} onClick={() => runMenuAction(() => onCloseDuplicateTabs?.())}><Trash2 size={14} /> Close duplicate tabs</button>
                     <span className="tab-context-divider" />
                     <button onClick={() => runMenuAction(() => navigator.clipboard?.writeText(tabs.filter(t => t.type === 'browser').map(t => t.url).join('\n')))}><Layers size={14} /> Copy all tab URLs</button>
+                </div>
+            )}
+
+            {overflowMenuOpen && (
+                <div className="list-all-tabs-menu" onClick={(event) => event.stopPropagation()}>
+                    <strong className="list-all-tabs-head">All tabs</strong>
+                    {orderedTabs.map(tab => (
+                        <div key={tab.id} className={`list-all-tab-row ${tab.id === activeTabId ? 'active' : ''}`}>
+                            <button
+                                className="list-all-tab-main"
+                                onClick={() => { setOverflowMenuOpen(false); onSwitchTab(tab.id); }}
+                                title={tab.title || 'New Tab'}
+                            >
+                                {renderTabIcon(tab)}
+                                <span className="list-all-tab-label">{overflowRowLabel(tab.title, tab.url)}</span>
+                            </button>
+                            {(tabs.length > 1 || tab.type === 'browser') && !pinnedTabIds.includes(tab.id) && (
+                                <button
+                                    className="list-all-tab-close"
+                                    onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+                                    title="Close tab"
+                                    aria-label={`Close ${tab.title || 'tab'}`}
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                    ))}
                 </div>
             )}
 

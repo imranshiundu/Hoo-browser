@@ -1,6 +1,6 @@
 import React from 'react';
 import './SettingsModal.css';
-import { X, Shield, Download, RotateCw, Trash2, Wifi, PlayCircle, Type, Cookie, History, Brain, Lock, CheckCircle2, AlertTriangle, Zap, RefreshCw, Camera, Eye } from 'lucide-react';
+import { X, Shield, Download, RotateCw, Trash2, Wifi, PlayCircle, Type, Cookie, History, Brain, Lock, CheckCircle2, AlertTriangle, Zap, RefreshCw, Camera, Eye, Search } from 'lucide-react';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -45,6 +45,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [autoStatus, setAutoStatus] = React.useState<AppUpdateStatus | null>(null);
     const [sitePermissions, setSitePermissions] = React.useState<SitePermissionRow[]>([]);
     const [siteZoomCount, setSiteZoomCount] = React.useState(0);
+    // Address bar suggestions (Awesome Bar): keystrokes go to DuckDuckGo's
+    // autocomplete only when this is on. Stored locally, read by NavigationBar.
+    const [addressSuggestions, setAddressSuggestions] = React.useState<boolean>(() => localStorage.getItem('hoo:address-suggestions') !== 'off');
 
     // The updater pushes live status for the lifetime of the app: subscribe once
     // so background download progress is captured even while this modal is closed.
@@ -160,6 +163,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                             <span><Cookie size={18} /> Strip third-party cookies</span>
                             <input type="checkbox" checked={adShield} onChange={(e) => { setAdShield(e.target.checked); updatePrivacy({ adShield: e.target.checked }); }} />
                         </label>
+                        <label className="setting-row">
+                            <span><Search size={18} /> Address bar search suggestions</span>
+                            <input
+                                type="checkbox"
+                                checked={addressSuggestions}
+                                onChange={(e) => {
+                                    setAddressSuggestions(e.target.checked);
+                                    localStorage.setItem('hoo:address-suggestions', e.target.checked ? 'on' : 'off');
+                                    document.dispatchEvent(new Event('hoo-suggestions-changed'));
+                                }}
+                            />
+                        </label>
+                        <p className="section-hint">When on, what you type in the address bar is sent to DuckDuckGo for autocomplete. History and bookmarks are matched locally and never leave the browser.</p>
                     </section>
 
                     <section className="settings-section">

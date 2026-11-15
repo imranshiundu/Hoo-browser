@@ -410,3 +410,293 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
+
+/* ---- Tab groups (Firefox 137-style) -------------------------------------- */
+.tab-group-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    align-self: flex-end;
+    height: 24px;
+    margin: 0 2px -1px;
+    padding: 0 8px;
+    border-radius: 12px 12px 0 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-bottom: 2px solid var(--group-color, #4c8dff);
+    cursor: pointer;
+    user-select: none;
+    max-width: 170px;
+    transition: background 0.14s ease;
+}
+
+.tab-group-pill:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tab-group-pill.collapsed {
+    align-self: center;
+    height: 26px;
+    border-radius: 13px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 -2px 0 var(--group-color, #4c8dff);
+}
+
+.tab-group-pill.drag-over {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: var(--group-color, #4c8dff);
+}
+
+.tab-group-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 50%;
+    background: var(--group-color, #4c8dff);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--group-color, #4c8dff) 60%, transparent);
+}
+
+.tab-group-caret {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.tab-group-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.82);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tab-group-count {
+    flex: 0 0 auto;
+    min-width: 16px;
+    height: 14px;
+    display: grid;
+    place-items: center;
+    padding: 0 4px;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--group-color, #4c8dff) 22%, transparent);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 9.5px;
+    font-weight: 700;
+}
+
+.tab-group-rename-input {
+    width: 110px;
+    min-width: 0;
+    background: #0b0b0b;
+    border: 1px solid var(--group-color, #4c8dff);
+    color: #fff;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 9px;
+    outline: none;
+    font-family: inherit;
+}
+
+/* Grouped tabs carry a colored underline in their group's hue. */
+.tab-item.grouped {
+    border-bottom: 2px solid var(--group-color, #4c8dff);
+}
+
+.tab-item.grouped.active {
+    border-bottom-color: var(--group-color, #4c8dff);
+    box-shadow: 0 -1px 0 rgba(255, 106, 0, .25), 0 0 0 1px rgba(255, 106, 0, .08);
+}
+
+/* Group submenu inside the renderer fallback context menu */
+.tab-context-submenu-wrap {
+    position: relative;
+}
+
+.tab-context-submenu-wrap .submenu-anchor {
+    justify-content: space-between;
+}
+
+.tab-context-submenu {
+    display: none;
+    position: absolute;
+    left: calc(100% + 2px);
+    top: 0;
+    min-width: 170px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 18, 18, 0.98);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    flex-direction: column;
+    gap: 3px;
+    z-index: 5100;
+}
+
+.tab-context-submenu-wrap:hover .tab-context-submenu,
+.tab-context-submenu-wrap:focus-within .tab-context-submenu {
+    display: flex;
+}
+
+.tab-context-submenu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.84);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    padding: 0 9px;
+    white-space: nowrap;
+}
+
+.tab-context-submenu button:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: #fff;
+}
+
+/* Color picker row in the group context menu */
+.tab-group-color-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.group-color-swatch {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.group-color-swatch.selected {
+    border-color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+}
+
+/* ---- List all tabs (overflow chevron) ------------------------------------- */
+.list-all-tabs-btn {
+    width: 26px;
+    height: 32px;
+    flex: 0 0 26px;
+    margin-top: 1px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    color: rgba(255, 255, 255, 0.72);
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.list-all-tabs-btn:hover,
+.list-all-tabs-btn.open {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.list-all-tabs-menu {
+    position: fixed;
+    right: 46px;
+    top: 40px;
+    width: 300px;
+    max-height: min(420px, 60vh);
+    overflow-y: auto;
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(18, 18, 18, 0.98);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(18px);
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: tab-hover-card-in 140ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.list-all-tabs-head {
+    padding: 4px 9px 8px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.list-all-tab-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 8px;
+}
+
+.list-all-tab-row:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.list-all-tab-row.active {
+    background: rgba(255, 106, 0, 0.12);
+}
+
+.list-all-tab-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 32px;
+    padding: 0 9px;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.84);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.list-all-tab-row.active .list-all-tab-main {
+    color: #fff;
+}
+
+.list-all-tab-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.list-all-tab-close {
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    flex: 0 0 24px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+}
+
+.list-all-tab-close:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+}

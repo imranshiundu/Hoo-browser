@@ -130,6 +130,10 @@ declare global {
         clearDownloads: () => Promise<void>;
         getHistory: () => Promise<HooHistoryEntry[]>;
         clearHistory: () => Promise<void>;
+        getAllHistory: () => Promise<HooHistoryEntry[]>;
+        deleteHistoryEntry: (url: string, timestamp: number) => Promise<number>;
+        clearHistoryRange: (range: 'hour' | 'day' | 'all') => Promise<number>;
+        getAddressSuggestions: (query: string) => Promise<{ ok: boolean; suggestions: string[] }>;
         onHistoryCleared: (callback: () => void) => void;
         onPermissionRequest: (callback: (request: HooPermissionRequest) => void) => void;
         resolvePermission: (requestId: string, decision: 'allow' | 'block', remember: boolean) => Promise<boolean>;

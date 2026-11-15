@@ -11,8 +11,23 @@ import RSSView from './views/RSSView';
 import PermissionPrompt, { PendingPermissionRequest } from './components/PermissionPrompt';
 import TabStrip from './components/TabStrip';
 import DownloadToasts from './components/DownloadToasts';
+import HistoryView from './views/HistoryView';
 import { Tab, TabType, siteInitial, siteInitialStyle } from './types';
 import { reorderTabsByIds } from '../main/tab-utils';
+import {
+    TabGroup,
+    TabGroupColor,
+    GROUP_COLORS,
+    addTabsToGroup,
+    createGroup,
+    nextGroupColor,
+    pruneGroups,
+    recolorGroup,
+    removeTabFromGroup,
+    renameGroup,
+    restoreGroups,
+    toggleGroupCollapse
+} from '../main/tab-groups';
 import {
     CHROME_HIDE_EDGE_PX,
     INFOBAR_AUTO_HIDE_MS,
@@ -30,10 +45,12 @@ const INTERNAL_TABS: Record<string, { id: string; type: TabType; title: string }
     library: { id: 'hoo-library', type: 'library', title: 'Bookmarks' },
     downloads: { id: 'hoo-downloads', type: 'downloads', title: 'Downloads' },
     extensions: { id: 'hoo-extensions', type: 'extensions', title: 'Modules & Extensions' },
-    reader: { id: 'hoo-reader', type: 'reader', title: 'Live Reader' }
+    reader: { id: 'hoo-reader', type: 'reader', title: 'Live Reader' },
+    history: { id: 'hoo-history', type: 'history', title: 'History' }
 };
 const initialHomeTab = makeHomeTab();
 const PINNED_TABS_KEY = 'hoo:pinned-tabs';
+const TAB_GROUPS_KEY = 'hoo:tab-groups';
 const BOOKMARK_KEY = 'hoo:bookmarks';
 
 type ClosedTab = { title: string; url: string };
@@ -47,6 +64,12 @@ const App: React.FC = () => {
     const [permissionQueue, setPermissionQueue] = useState<PendingPermissionRequest[]>([]);
     const [pinnedTabIds, setPinnedTabIds] = useState<string[]>(() => {
         try { return JSON.parse(localStorage.getItem(PINNED_TABS_KEY) || '[]'); }
+        catch { return []; }
+    });
+    // Firefox 137-style tab groups: named, colored, collapsible. Persisted in
+    // localStorage and repaired against the live tab list on every load.
+    const [tabGroups, setTabGroups] = useState<TabGroup[]>(() => {
+        try { return restoreGroups(JSON.parse(localStorage.getItem(TAB_GROUPS_KEY) || '[]'), []); }
         catch { return []; }
     });
 
@@ -74,6 +97,73 @@ const App: React.FC = () => {
     useEffect(() => {
         localStorage.setItem(PINNED_TABS_KEY, JSON.stringify(pinnedTabIds.filter(id => tabs.some(tab => tab.id === id))));
     }, [pinnedTabIds, tabs]);
+
+    useEffect(() => {
+        // Keep groups in sync with reality: drop closed tabs, then persist.
+        setTabGroups(prev => {
+            const pruned = pruneGroups(prev, tabs.map(tab => tab.id));
+            localStorage.setItem(TAB_GROUPS_KEY, JSON.stringify(pruned));
+            return pruned.length === prev.length ? prev : pruned;
+        });
+    }, [tabs]);
+
+    const applyTabGroups = (updater: (prev: TabGroup[]) => TabGroup[]): void => {
+        setTabGroups(prev => {
+            const next = updater(prev);
+            localStorage.setItem(TAB_GROUPS_KEY, JSON.stringify(next));
+            return next;
+        });
+    };
+
+    const handleAddTabToGroup = (tabId: string, groupId: string | null): void => {
+        if (groupId) {
+            applyTabGroups(prev => prev.map(group => group.id === groupId ? addTabsToGroup(group, [tabId]) : group));
+            return;
+        }
+        applyTabGroups(prev => {
+            const made = createGroup(`grp-${Date.now()}`, 'New group', nextGroupColor(prev), [tabId]);
+            return [...prev, made];
+        });
+    };
+
+    const handleRemoveTabFromGroup = (tabId: string): void => {
+        applyTabGroups(prev => prev.map(group => removeTabFromGroup(group, tabId)).filter(group => group.tabIds.length > 0));
+    };
+
+    const handleRenameGroup = (groupId: string, name: string): void => {
+        applyTabGroups(prev => prev.map(group => group.id === groupId ? renameGroup(group, name) : group));
+    };
+
+    const handleRecolorGroup = (groupId: string, color: TabGroupColor): void => {
+        applyTabGroups(prev => prev.map(group => group.id === groupId ? recolorGroup(group, color) : group));
+    };
+
+    const handleToggleGroupCollapse = (groupId: string): void => {
+        applyTabGroups(prev => prev.map(group => group.id === groupId ? toggleGroupCollapse(group) : group));
+    };
+
+    const handleUngroupGroup = (groupId: string): void => {
+        applyTabGroups(prev => prev.filter(group => group.id !== groupId));
+    };
+
+    // Dropping a tab on a group pill: join the group and land next to its
+    // last member so the group stays one contiguous run in the strip.
+    const handleDropTabOnGroup = (tabId: string, groupId: string): void => {
+        const group = tabGroups.find(item => item.id === groupId);
+        if (!group) return;
+        const anchor = group.tabIds[group.tabIds.length - 1];
+        const ids = tabs.map(tab => tab.id);
+        const from = ids.indexOf(tabId);
+        const target = ids.indexOf(anchor);
+        if (from >= 0 && target >= 0 && from !== target) {
+            ids.splice(target, 0, ...ids.splice(from, 1));
+            const pinned = new Set(pinnedTabIds);
+            const nextIds = [...ids.filter(id => pinned.has(id)), ...ids.filter(id => !pinned.has(id))];
+            setTabs(prev => reorderTabsByIds(prev, nextIds));
+            void window.electronAPI?.reorderTabs?.(nextIds);
+        }
+        handleAddTabToGroup(tabId, groupId);
+    };
 
     const rememberClosedTab = (tab: Tab): void => {
         if (tab.type !== 'browser' || !tab.url) return;
@@ -351,6 +441,8 @@ const App: React.FC = () => {
                     openInternalTab('extensions');
                 } else if (action === 'history') {
                     document.dispatchEvent(new CustomEvent('hoo-open-history'));
+                } else if (action === 'history-page') {
+                    openInternalTab('history');
                 } else if (action === 'settings') {
                     setSettingsOpen(true);
                 }
@@ -375,10 +467,16 @@ const App: React.FC = () => {
 
     useEffect(() => {
         // The toolbar's "Manage bookmarks" entry opens the same library tab
-        // as the Ctrl+Shift+O menu accelerator.
+        // as the Ctrl+Shift+O menu accelerator, and "Full history" opens the
+        // same page as the Ctrl+H accelerator.
         const openLibrary = (): void => openLibraryRef.current();
+        const openHistoryPage = (): void => shortcutRef.current('history-page');
         document.addEventListener('hoo-open-library', openLibrary);
-        return () => document.removeEventListener('hoo-open-library', openLibrary);
+        document.addEventListener('hoo-open-history-page', openHistoryPage);
+        return () => {
+            document.removeEventListener('hoo-open-library', openLibrary);
+            document.removeEventListener('hoo-open-history-page', openHistoryPage);
+        };
     }, []);
 
     useEffect(() => {
@@ -556,6 +654,7 @@ const App: React.FC = () => {
                     favicons={favicons}
                     audibleTabs={audibleMap}
                     mutedTabs={mutedMap}
+                    tabGroups={tabGroups}
                     onSwitchTab={(id): void => { void handleSwitchTab(id); }}
                     onSplitTab={(id): void => { void handleSplitTab(id); }}
                     onCloseTab={(id): void => { void handleCloseTab(id); }}
@@ -569,6 +668,13 @@ const App: React.FC = () => {
                     onReopenClosedTab={() => { void reopenClosedTab(); }}
                     onBookmarkAllTabs={bookmarkAllTabs}
                     onCloseDuplicateTabs={() => { void closeDuplicateTabs(); }}
+                    onAddTabToGroup={handleAddTabToGroup}
+                    onRemoveTabFromGroup={handleRemoveTabFromGroup}
+                    onRenameGroup={handleRenameGroup}
+                    onRecolorGroup={handleRecolorGroup}
+                    onToggleGroupCollapse={handleToggleGroupCollapse}
+                    onUngroupGroup={handleUngroupGroup}
+                    onDropTabOnGroup={handleDropTabOnGroup}
                 />
                 <section className="browser-stage">
                     {activeTab.type === 'browser' ? (
@@ -593,6 +699,8 @@ const App: React.FC = () => {
                         <ExtensionsView />
                     ) : activeTab.type === 'reader' ? (
                         <RSSView />
+                    ) : activeTab.type === 'history' ? (
+                        <HistoryView onNavigate={(url): void => { void handleNavigateFromHome(url); }} />
                     ) : (
                         <Home onNavigate={handleNavigateFromHome} onOpenSettings={() => setSettingsOpen(true)} onOpenInternal={openInternalTab} />
                     )}

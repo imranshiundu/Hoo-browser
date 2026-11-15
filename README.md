@@ -93,9 +93,13 @@ The current codebase includes working early versions of:
 - **download toasts**: a bottom-right stack taps you on the shoulder when a download starts, finishes, or fails — with Open / Folder actions on the finished ones — while every silent progress tick stays out of the way
 - **site info panel**: click the padlock in the address bar to see the connection state ("Connection is secure" / an amber warning on plain HTTP) and cycle per-site permission decisions (Ask → Allow → Block) for the camera & microphone, location, notifications, screen recording and more — the same storage the permission prompts and Settings use
 - **tab hover previews**: hover a tab for a Firefox-style identity card (favicon, title, site, live loading state) with switch and close actions — honest title/URL content rather than fake thumbnails, since background tabs cannot be screenshotted in Electron
+- **the Awesome Bar**: the address bar now suggests like Firefox — switch-to-tab matches, unified bookmarks + history results (bookmarks boosted, recency-weighted, deduped), and live DuckDuckGo search suggestions fetched by the main process (keystrokes only, 2.5 s timeout, cached, silently empty offline, toggleable in Settings → Privacy); full keyboard navigation (↑/↓ to pick, Enter to go, Esc to dismiss), and Enter with no arrow keys does exactly what a plain address bar would
+- **tab groups**: Firefox 137-style named, colored, collapsible groups — right-click a tab for "Add tab to new group" (or the native menu's group submenu), drop tabs onto a group pill to join, click a pill to collapse/expand (the active tab never hides), double-click to rename, right-click the pill for color swatches, ungroup, and close-group; groups persist across restarts and dissolve when emptied
+- **List all tabs**: when the strip overflows, Firefox's chevron appears at the end of the tab bar and opens a menu listing every open tab with favicon, label and close buttons
+- **a real History page** (Ctrl+H): Firefox Library-style with day grouping (Today / Yesterday / weekday labels), live search, per-visit forget buttons, and "Forget the last hour / today / everything" range clearing — the same storage the toolbar popover uses
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service), `v0.7 Real Internal Pages` (Downloads page, honest Modules & Extensions page, Live Reader with main-process feed fetching and persistent custom feeds, home-page tool shortcuts), `v0.8 Fullscreen Like Firefox` (HTML5 fullscreen + F11 immersive shell, auto-hiding site banner, top-edge tab strip reveal, dead-code purge), and `v0.9 Polish Pass` (download toasts, padlock site-info panel with per-site permission cycling, tab hover preview cards) have shipped.
+The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service), `v0.7 Real Internal Pages` (Downloads page, honest Modules & Extensions page, Live Reader with main-process feed fetching and persistent custom feeds, home-page tool shortcuts), `v0.8 Fullscreen Like Firefox` (HTML5 fullscreen + F11 immersive shell, auto-hiding site banner, top-edge tab strip reveal, dead-code purge), `v0.9 Polish Pass` (download toasts, padlock site-info panel with per-site permission cycling, tab hover preview cards), and `v0.10 Awesome UX` (Awesome Bar suggestions, tab groups, List-all-tabs overflow chevron, real History page) have shipped.
 
 ## Test suite
 
@@ -120,7 +124,7 @@ metadata the in-app updater consumes. So shipping a version is:
 
 ```bash
 # bump package.json first, then:
-git tag v0.9.0 && git push origin v0.9.0
+git tag v0.10.0 && git push origin v0.10.0
 ```
 
 Covered modules today:
@@ -132,6 +136,11 @@ Covered modules today:
 | `storage.ts` | profile normalization, corrupt-tab filtering, active-tab validation, atomic save/load round-trips, site permission/zoom persistence |
 | `download-manager.ts` | filename sanitization and executable danger hints |
 | `tab-utils.ts` | collision-free tab ids, zoom clamping/stepping, find-bar status text, crash reason labels, byte formatting, drag-reorder id mapping, window-state clamping, history search filtering |
+| `tab-groups.ts` | group creation/dedupe, membership moves, empty-group pruning, collapsed-group visibility (active tab never hides), least-used color picking, persisted-state repair against live tabs |
+| `tab-overflow.ts` | overflow detection with 1px slack, junk-measurement rejection, menu row labels |
+| `suggest-service.ts` | both DuckDuckGo `/ac/` response shapes, case-insensitive suggestion dedupe, short-query skip, TTL cache, network/HTTP failure translation |
+| `awesomebar-model.ts` (renderer) | URL-vs-search resolution, bang shortcuts, prefix>word>substring ranking, unified bookmark/history dedupe, wrapped highlight movement |
+| `history-page-model.ts` (renderer) | day grouping with Today/Yesterday/weekday labels, per-day page collapse, range cutoffs, search filtering, row keys |
 | `permissions.ts` | per-origin permission decisions, decision sanitization, DeepSpoof exemption precedence (stored blocks win) |
 | `zoom-store.ts` | per-site zoom clamping and origin-keyed persistence sanitization |
 | `bookmarks-io.ts` | Netscape HTML bookmark serialization/parsing, entity escaping, folder round-trips, dedupe-merging with caps |

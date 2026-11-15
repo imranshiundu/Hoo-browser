@@ -1,4 +1,4 @@
-export type TabType = 'home' | 'browser' | 'library' | 'downloads' | 'extensions' | 'reader';
+export type TabType = 'home' | 'browser' | 'library' | 'downloads' | 'extensions' | 'reader' | 'history';
 
 export interface Tab {
     id: string;

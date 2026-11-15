@@ -26,6 +26,7 @@ const Browser: React.FC<BrowserProps> = ({
     canGoBack = true,
     canGoForward = true,
     zoomBadge = null,
+    onSwitchTab,
     onOpenSettings
 }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -168,6 +169,7 @@ const Browser: React.FC<BrowserProps> = ({
                 onSplitWithTab={handleSplitWithTab}
                 onClearSplit={handleClearSplit}
                 onOpenSettings={onOpenSettings}
+                onSwitchToTab={onSwitchTab}
             />
             {loading && <div className="page-progress-bar" aria-hidden="true"><div className="page-progress-fill" /></div>}
             {findOpen && (

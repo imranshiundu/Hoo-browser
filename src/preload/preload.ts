@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     clearDownloads: () => ipcRenderer.invoke('clear-downloads'),
     getHistory: () => ipcRenderer.invoke('get-history'),
     clearHistory: () => ipcRenderer.invoke('clear-history'),
+    getAllHistory: () => ipcRenderer.invoke('get-all-history'),
+    deleteHistoryEntry: (url: string, timestamp: number) => ipcRenderer.invoke('delete-history-entry', url, timestamp),
+    clearHistoryRange: (range: 'hour' | 'day' | 'all') => ipcRenderer.invoke('clear-history-range', range),
+    getAddressSuggestions: (query: string) => ipcRenderer.invoke('get-address-suggestions', query),
     onHistoryCleared: (callback: () => void) => {
         ipcRenderer.on('history-cleared', () => callback());
     },

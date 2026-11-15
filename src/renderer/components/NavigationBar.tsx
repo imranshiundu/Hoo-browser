@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './NavigationBar.css';
-import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Search, Star, BookOpen, Download, Clock, Shield, MoreHorizontal, Settings, FolderOpen, ExternalLink, FileWarning, Home, Columns2, PanelRightClose, Sparkles, History, BookMarked, Trash2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCw, X, Lock, Globe, Search, Star, BookOpen, Download, Clock, Shield, MoreHorizontal, Settings, FolderOpen, ExternalLink, FileWarning, Home, Columns2, PanelRightClose, Sparkles, History, BookMarked, Trash2, ShieldAlert, Columns } from 'lucide-react';
 import { filterHistoryEntries } from '../../main/tab-utils';
 import { Tab } from '../types';
 import { formatBytes } from '../../main/tab-utils';
 import { originFromUrl, permissionPanelLabel, cycleDecision, DECIDABLE_PERMISSIONS, PermissionResolution } from '../../main/permissions';
+import { AwesomeInputRow, buildAwesomeResults, moveHighlight, resolveAwesomeTarget } from '../awesomebar-model';
 
 interface NavigationBarProps {
     tabId: string;
@@ -23,6 +24,7 @@ interface NavigationBarProps {
     onSplitWithTab?: (tabId: string) => void;
     onClearSplit?: () => void;
     onOpenSettings?: () => void;
+    onSwitchToTab?: (tabId: string) => void;
 }
 
 interface DownloadEntry {
@@ -80,7 +82,8 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     onStop,
     onSplitWithTab,
     onClearSplit,
-    onOpenSettings
+    onOpenSettings,
+    onSwitchToTab
 }) => {
     const [inputValue, setInputValue] = useState(url);
     const [bookmarksOpen, setBookmarksOpen] = useState(false);
@@ -97,6 +100,14 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
     const [history, setHistory] = useState<HistoryEntry[]>([]);
     const [zoomVisible, setZoomVisible] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    // Awesome Bar state: dropdown visibility, keyboard highlight and the
+    // live DuckDuckGo suggestions fetched through the main process.
+    const [awesomeOpen, setAwesomeOpen] = useState(false);
+    const [awesomeHighlight, setAwesomeHighlight] = useState(-1);
+    const [awesomeSuggestions, setAwesomeSuggestions] = useState<string[]>([]);
+    const [suggestionsEnabled, setSuggestionsEnabled] = useState<boolean>(() => localStorage.getItem('hoo:address-suggestions') !== 'off');
+    const suggestionRequestId = useRef(0);
+    const suggestionTimer = useRef<number | null>(null);
 
     useEffect(() => setInputValue(url), [url]);
 
@@ -164,6 +175,9 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             inputRef.current?.select();
         };
         document.addEventListener('hoo-focus-address', focusAddress);
+        document.addEventListener('hoo-suggestions-changed', () => {
+            setSuggestionsEnabled(localStorage.getItem('hoo:address-suggestions') !== 'off');
+        });
         return () => document.removeEventListener('hoo-focus-address', focusAddress);
     }, []);
 
@@ -176,29 +190,102 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
             if (!target?.closest('.downloads-menu-wrap')) setDownloadsOpen(false);
             if (!target?.closest('.history-menu-wrap')) setHistoryOpen(false);
             if (!target?.closest('.siteinfo-menu-wrap')) setSiteInfoOpen(false);
+            // Clicking anywhere outside the address form drops the Awesome Bar.
+            if (!target?.closest('.address-form')) setAwesomeOpen(false);
         };
         document.addEventListener('mousedown', closePopovers);
         return () => document.removeEventListener('mousedown', closePopovers);
     }, []);
 
-    const normalizeTarget = (value: string): string => {
-        let target = value.trim();
-        if (!target) return '';
-        if (/^(magnet:|mailto:|tel:|sms:|bitcoin:|ethereum:|tg:|whatsapp:)/i.test(target)) return target;
-        if (target.startsWith('!w ')) return `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(target.substring(3))}`;
-        if (target.startsWith('!y ')) return `https://www.youtube.com/results?search_query=${encodeURIComponent(target.substring(3))}`;
-        if (target.startsWith('!g ')) return `https://www.google.com/search?q=${encodeURIComponent(target.substring(3))}`;
-        if (target.startsWith('!d ')) return `https://duckduckgo.com/?q=${encodeURIComponent(target.substring(3))}`;
-        if (target.startsWith('!ai ')) return `https://duck.ai/?q=${encodeURIComponent(target.substring(4))}`;
-        const isUrl = target.includes('.') && !target.includes(' ') && (target.startsWith('http') || target.split('/')[0].includes('.'));
-        if (!isUrl) return `https://duckduckgo.com/?q=${encodeURIComponent(target)}`;
-        if (!target.startsWith('http')) return `https://${target}`;
-        return target;
+    // ---- Awesome Bar -------------------------------------------------------
+    // One ranked, deduped list built by the pure model: primary action,
+    // switch-to-tab, bookmarks + history, then live DuckDuckGo suggestions.
+    const awesomeResults = React.useMemo(
+        () => buildAwesomeResults(inputValue, { tabs, bookmarks, history, suggestions: awesomeSuggestions }),
+        [inputValue, tabs, bookmarks, history, awesomeSuggestions]
+    );
+
+    useEffect(() => {
+        // Highlight follows the list; reset whenever its shape changes.
+        setAwesomeHighlight(current => (current >= awesomeResults.flat.length ? -1 : current));
+    }, [awesomeResults]);
+
+    useEffect(() => () => {
+        if (suggestionTimer.current) window.clearTimeout(suggestionTimer.current);
+        suggestionRequestId.current += 1;
+    }, []);
+
+    const scheduleSuggestions = (value: string): void => {
+        if (suggestionTimer.current) window.clearTimeout(suggestionTimer.current);
+        const trimmed = value.trim();
+        if (!suggestionsEnabled || trimmed.length < 2) {
+            setAwesomeSuggestions([]);
+            return;
+        }
+        suggestionTimer.current = window.setTimeout(async (): Promise<void> => {
+            const requestId = ++suggestionRequestId.current;
+            try {
+                const result = await window.electronAPI?.getAddressSuggestions?.(trimmed);
+                if (requestId === suggestionRequestId.current && result?.ok) {
+                    setAwesomeSuggestions(result.suggestions || []);
+                }
+            } catch { /* offline: suggestions simply stay empty */ }
+        }, 180);
     };
+
+    const activateAwesomeRow = (row: AwesomeInputRow): void => {
+        setAwesomeOpen(false);
+        setAwesomeHighlight(-1);
+        if (row.kind === 'tab' && row.tabId && onSwitchToTab) {
+            onSwitchToTab(row.tabId);
+            return;
+        }
+        if (row.target) onNavigate(row.target);
+    };
+
+    const handleAddressChange = (value: string): void => {
+        setInputValue(value);
+        setAwesomeOpen(!!value.trim());
+        scheduleSuggestions(value);
+    };
+
+    const handleAddressKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            if (!awesomeOpen || !awesomeResults.flat.length) return;
+            event.preventDefault();
+            setAwesomeHighlight(current => moveHighlight(
+                current < 0 && event.key === 'ArrowDown' ? -1 : current,
+                event.key === 'ArrowDown' ? 1 : -1,
+                awesomeResults.flat.length
+            ));
+            return;
+        }
+        if (event.key === 'Escape') {
+            setAwesomeOpen(false);
+            setAwesomeHighlight(-1);
+            setInputValue(url);
+            inputRef.current?.blur();
+            return;
+        }
+        if (event.key === 'Enter' && awesomeOpen && awesomeHighlight >= 0 && awesomeResults.flat[awesomeHighlight]) {
+            event.preventDefault();
+            activateAwesomeRow(awesomeResults.flat[awesomeHighlight]);
+            inputRef.current?.blur();
+        }
+    };
+
+    const normalizeTarget = (value: string): string => resolveAwesomeTarget(value);
 
     const handleSubmit = (e: React.FormEvent): void => {
         e.preventDefault();
+        // Arrow keys pick a row; plain Enter always navigates.
+        if (awesomeOpen && awesomeHighlight >= 0 && awesomeResults.flat[awesomeHighlight]) {
+            activateAwesomeRow(awesomeResults.flat[awesomeHighlight]);
+            inputRef.current?.blur();
+            return;
+        }
         const target = normalizeTarget(inputValue);
+        setAwesomeOpen(false);
         if (target) onNavigate(target);
         inputRef.current?.blur();
     };
@@ -372,17 +459,57 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                     type="text"
                     className="address-input"
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onFocus={(e) => e.target.select()}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                            setInputValue(url);
-                            inputRef.current?.blur();
-                        }
-                    }}
+                    onChange={(e) => handleAddressChange(e.target.value)}
+                    onFocus={(e) => { e.target.select(); if (e.target.value.trim()) setAwesomeOpen(true); }}
+                    onKeyDown={handleAddressKeyDown}
                     placeholder="Search or enter address"
                     spellCheck={false}
+                    aria-expanded={awesomeOpen}
+                    role="combobox"
+                    aria-controls="awesome-dropdown"
                 />
+                {awesomeOpen && awesomeResults.flat.length > 0 && (
+                    <div
+                        id="awesome-dropdown"
+                        className="awesome-dropdown"
+                        role="listbox"
+                        // mousedown preventDefault keeps input focus while clicking rows.
+                        onMouseDown={(e) => e.preventDefault()}
+                    >
+                        {(() => {
+                            let rowCursor = 0;
+                            return awesomeResults.sections.map(section => (
+                                <div key={section.id} className={`awesome-section ${section.id}`}>
+                                    {section.label && <span className="awesome-section-label">{section.label}</span>}
+                                    {section.rows.map(row => {
+                                        const index = rowCursor++;
+                                        const rowIcon =
+                                            row.kind === 'tab' ? <Columns size={13} /> :
+                                            row.kind === 'bookmark' ? <Star size={13} /> :
+                                            row.kind === 'history' ? <Clock size={13} /> :
+                                            row.kind === 'navigate' ? <Globe size={13} /> :
+                                            <Search size={13} />;
+                                        return (
+                                            <button
+                                                key={`${row.kind}:${row.target}:${index}`}
+                                                role="option"
+                                                aria-selected={index === awesomeHighlight}
+                                                className={`awesome-row ${index === awesomeHighlight ? 'active' : ''}`}
+                                                onMouseEnter={() => setAwesomeHighlight(index)}
+                                                onClick={() => activateAwesomeRow(row)}
+                                                title={row.subtitle}
+                                            >
+                                                <span className="awesome-row-icon">{rowIcon}</span>
+                                                <span className="awesome-row-title">{row.title}</span>
+                                                <span className="awesome-row-sub">{row.subtitle}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ));
+                        })()}
+                    </div>
+                )}
                 {zoomVisible && zoomBadge && zoomBadge.percent !== 100 && (
                     <span className="zoom-badge" title="Page zoom (Ctrl+0 resets)">{zoomBadge.percent}%</span>
                 )}
@@ -535,7 +662,8 @@ const NavigationBar: React.FC<NavigationBarProps> = ({
                             <button onClick={() => { setToolsOpen(false); onNavigate('https://duck.ai/'); }}><Sparkles size={15} /> Duck.ai</button>
                             <button onClick={openBookmarkManager}><BookMarked size={15} /> Bookmark manager</button>
                             <button onClick={() => { setToolsOpen(false); void refreshDownloads(); setDownloadsOpen(true); }}><Download size={15} /> Downloads</button>
-                            <button onClick={() => { setToolsOpen(false); void refreshHistory(); setHistoryOpen(true); }}><History size={15} /> Recent history</button>
+                            <button onClick={() => { setToolsOpen(false); void refreshHistory(); setHistoryOpen(true); }}><Clock size={15} /> Recent history</button>
+                            <button onClick={() => { setToolsOpen(false); document.dispatchEvent(new Event('hoo-open-history-page')); }}><History size={15} /> Full history</button>
                             <button onClick={() => { setToolsOpen(false); onOpenSettings?.(); }}><Settings size={15} /> Settings</button>
                         </div>
                     )}
