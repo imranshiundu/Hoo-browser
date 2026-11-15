@@ -5,6 +5,9 @@ import TitleBar from './components/TitleBar';
 import Home from './views/Home';
 import Browser from './views/Browser';
 import BookmarksView from './views/BookmarksView';
+import DownloadsView from './views/DownloadsView';
+import ExtensionsView from './views/ExtensionsView';
+import RSSView from './views/RSSView';
 import PermissionPrompt, { PendingPermissionRequest } from './components/PermissionPrompt';
 import TabStrip from './components/TabStrip';
 import { Tab, TabType } from './types';
@@ -12,7 +15,14 @@ import { reorderTabsByIds } from '../main/tab-utils';
 import { AlertTriangle, X } from 'lucide-react';
 
 const makeHomeTab = (): Tab => ({ id: `home-${Date.now()}`, type: 'home', title: 'New Tab' });
-const LIBRARY_TAB_ID = 'hoo-library';
+// Internal pages behave like Chrome's chrome:// pages: renderer-only tabs,
+// one instance each, reachable from the menu, home page and shortcuts.
+const INTERNAL_TABS: Record<string, { id: string; type: TabType; title: string }> = {
+    library: { id: 'hoo-library', type: 'library', title: 'Bookmarks' },
+    downloads: { id: 'hoo-downloads', type: 'downloads', title: 'Downloads' },
+    extensions: { id: 'hoo-extensions', type: 'extensions', title: 'Modules & Extensions' },
+    reader: { id: 'hoo-reader', type: 'reader', title: 'Live Reader' }
+};
 const initialHomeTab = makeHomeTab();
 const PINNED_TABS_KEY = 'hoo:pinned-tabs';
 const BOOKMARK_KEY = 'hoo:bookmarks';
@@ -62,13 +72,18 @@ const App: React.FC = () => {
 
     // The bookmark manager lives in its own renderer tab (like Chrome's
     // bookmark manager page). One instance at a time.
-    const openLibraryTab = (): void => {
-        setTabs(prev => prev.some(t => t.id === LIBRARY_TAB_ID)
+    const openInternalTab = (key: keyof typeof INTERNAL_TABS): void => {
+        const page = INTERNAL_TABS[key];
+        setTabs(prev => prev.some(t => t.id === page.id)
             ? prev
-            : [...prev, { id: LIBRARY_TAB_ID, type: 'library' as TabType, title: 'Bookmarks' }]);
-        setActiveTabId(LIBRARY_TAB_ID);
+            : [...prev, { id: page.id, type: page.type as TabType, title: page.title }]);
+        setActiveTabId(page.id);
         setSplitTabId(null);
         void window.electronAPI?.hideBrowserView?.();
+    };
+
+    const openLibraryTab = (): void => {
+        openInternalTab('library');
     };
 
     useEffect(() => {
@@ -309,7 +324,13 @@ const App: React.FC = () => {
                 } else if (action === 'focus-address') {
                     document.dispatchEvent(new CustomEvent('hoo-focus-address'));
                 } else if (action === 'downloads') {
-                    document.dispatchEvent(new CustomEvent('hoo-open-downloads'));
+                    openInternalTab('downloads');
+                } else if (action === 'open-library') {
+                    openInternalTab('library');
+                } else if (action === 'open-reader') {
+                    openInternalTab('reader');
+                } else if (action === 'open-extensions') {
+                    openInternalTab('extensions');
                 } else if (action === 'history') {
                     document.dispatchEvent(new CustomEvent('hoo-open-history'));
                 } else if (action === 'settings') {
@@ -499,8 +520,14 @@ const App: React.FC = () => {
                         />
                     ) : activeTab.type === 'library' ? (
                         <BookmarksView onNavigate={(url): void => { void handleNavigateFromHome(url); }} />
+                    ) : activeTab.type === 'downloads' ? (
+                        <DownloadsView />
+                    ) : activeTab.type === 'extensions' ? (
+                        <ExtensionsView />
+                    ) : activeTab.type === 'reader' ? (
+                        <RSSView />
                     ) : (
-                        <Home onNavigate={handleNavigateFromHome} onOpenSettings={() => setSettingsOpen(true)} />
+                        <Home onNavigate={handleNavigateFromHome} onOpenSettings={() => setSettingsOpen(true)} onOpenInternal={openInternalTab} />
                     )}
                 </section>
             </main>

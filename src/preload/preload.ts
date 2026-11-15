@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getSiteZooms: () => ipcRenderer.invoke('get-site-zooms'),
     clearSiteZooms: () => ipcRenderer.invoke('clear-site-zooms'),
     restoreCrashedTabs: () => ipcRenderer.invoke('restore-crashed-tabs'),
+    rssFetch: (url: string) => ipcRenderer.invoke('rss-fetch', url),
     exportBookmarks: (entries: any[]) => ipcRenderer.invoke('export-bookmarks', entries),
     importBookmarks: () => ipcRenderer.invoke('import-bookmarks'),
     updatePrivacySettings: (settings: any) => ipcRenderer.invoke('update-privacy-settings', settings),

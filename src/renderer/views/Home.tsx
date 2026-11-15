@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './Home.css';
-import { Check, Image, Search, Settings, BookmarkPlus } from 'lucide-react';
+import { Check, Image, Search, Settings, BookmarkPlus, Download, Rss, Puzzle } from 'lucide-react';
 import { siteInitial, siteInitialStyle } from '../types';
 import { getWallpaperById, HOO_WALLPAPERS, HOO_WALLPAPER_STORAGE_KEY } from '../assets/wallpapers';
 
@@ -10,11 +10,12 @@ const fallbackWallpaper = require('../assets/branding/hoo-wallpaper.svg');
 interface HomeProps {
     onNavigate?: (url: string) => void;
     onOpenSettings?: () => void;
+    onOpenInternal?: (target: 'library' | 'downloads' | 'extensions' | 'reader') => void;
 }
 
 const BOOKMARK_KEY = 'hoo:bookmarks';
 
-const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
+const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings, onOpenInternal }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [wallpaperId, setWallpaperId] = useState(() => localStorage.getItem(HOO_WALLPAPER_STORAGE_KEY) || 'owl-night');
     const [imageFallback, setImageFallback] = useState(false);
@@ -153,6 +154,18 @@ const Home: React.FC<HomeProps> = ({ onNavigate, onOpenSettings }) => {
                             </button>
                         );
                     })}
+                </div>
+
+                <div className="home-tools" aria-label="Browser tools">
+                    <button type="button" className="home-tool-chip" onClick={() => onOpenInternal?.('downloads')}>
+                        <Download size={14} /> Downloads
+                    </button>
+                    <button type="button" className="home-tool-chip" onClick={() => onOpenInternal?.('reader')}>
+                        <Rss size={14} /> Live Reader
+                    </button>
+                    <button type="button" className="home-tool-chip" onClick={() => onOpenInternal?.('extensions')}>
+                        <Puzzle size={14} /> Modules
+                    </button>
                 </div>
             </main>
         </div>

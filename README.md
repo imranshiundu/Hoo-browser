@@ -88,9 +88,10 @@ The current codebase includes working early versions of:
 - local storage through Electron `safeStorage` where available
 - Linux install/update scripts and cross-platform packaging metadata
 - **automatic updates**: packaged installs (AppImage, deb, NSIS, DMG) check GitHub Releases at startup, download new versions in the background, and offer one-click "Restart to update" — with live progress in Settings. Source checkouts keep the git-based updater (pull, selective install, selective rebuild); copies that cannot self-update say so honestly and link to the releases page
+- **real internal pages** (like Chrome's `chrome://` pages): a full **Downloads page** (Ctrl+J, live progress, open file / show in folder, clear list), an honest **Modules & Extensions page** (every toggle is a real built-in privacy setting — no fake extension cards), and the **Live Reader** RSS page that fetches feeds through the main process (no third-party CORS proxy) with persistent custom feeds
 - Vitest unit tests and GitHub Actions CI
 
-The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), and `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service) have shipped. The next milestone is `v0.7 Web Apps` / permissions UX polish.
+The important work now is to make the project stable, testable, installable, and honest — `v0.3 Stable Tabs` (navigation state, find, downloads, crash handling, app-wide shortcuts), `v0.4 Feels Like A Browser` (drag-reorder, single instance, window restore, real icons, bookmark toggle), `v0.5 Ask First` (site permission prompts, per-site zoom, bookmark manager with import/export, history search/clear), `v0.6 Keeps Itself Current` (electron-updater against GitHub Releases, background download, restart-to-update, dual-channel update service), and `v0.7 Real Internal Pages` (Downloads page, honest Modules & Extensions page, Live Reader with main-process feed fetching and persistent custom feeds, home-page tool shortcuts) have shipped.
 
 ## Test suite
 
@@ -131,6 +132,8 @@ Covered modules today:
 | `zoom-store.ts` | per-site zoom clamping and origin-keyed persistence sanitization |
 | `bookmarks-io.ts` | Netscape HTML bookmark serialization/parsing, entity escaping, folder round-trips, dedupe-merging with caps |
 | `update-service.ts` | update-channel resolution (packaged vs source vs none), startup auto-check gating, download progress formatting, updater error translation |
+| `rss-feeds.ts` (renderer) | feed URL validation/normalization, custom feed persistence, default/custom merge with dedupe, corrupt-storage recovery |
+| `download-model.ts` (renderer) | download status text, size formatting, live record upsert semantics |
 | `types.ts` (renderer) | privacy-preserving site-initial avatars used instead of third-party favicon services |
 | `branding assets` | the generated PNG/ICO/ICNS icon set exists so builds can never silently lose the app icon again |
 

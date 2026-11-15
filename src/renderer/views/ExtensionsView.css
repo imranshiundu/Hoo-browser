@@ -203,3 +203,11 @@ input:checked+.ext-slider {
 input:checked+.ext-slider:before {
     transform: translateX(20px);
 }
+.extensions-note {
+    margin-top: 26px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}

@@ -138,6 +138,7 @@ declare global {
         getSiteZooms: () => Promise<Record<string, number>>;
         clearSiteZooms: () => Promise<void>;
         restoreCrashedTabs: () => Promise<number>;
+        rssFetch: (url: string) => Promise<{ ok: boolean; contents?: string; error?: string }>;
         exportBookmarks: (entries: HooBookmarkEntry[]) => Promise<{ ok: boolean; path?: string; error?: string }>;
         importBookmarks: () => Promise<{ ok: boolean; bookmarks?: HooBookmarkEntry[]; error?: string }>;
         navigateTo: (url: string) => Promise<string | null>;

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard, dialog, screen } from "electron";
+import { app, BrowserWindow, BrowserView, ipcMain, session, Menu, shell, clipboard, dialog, screen, net } from "electron";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
@@ -1205,6 +1205,24 @@ ipcMain.handle('import-bookmarks', async (): Promise<{ ok: boolean; bookmarks?: 
     }
 });
 
+// ---- Live Reader feed fetching -------------------------------------------
+// The renderer cannot fetch cross-origin RSS without a CORS proxy, and a
+// privacy browser must not route every read through api.allorigins.win. The
+// main process fetches with Electron's net stack instead: no CORS, no proxy,
+// and the host sees the request the same as any page load.
+ipcMain.handle('rss-fetch', async (_event, url: string): Promise<{ ok: boolean; contents?: string; error?: string }> => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+        return { ok: false, error: 'Only http(s) feed URLs are supported.' };
+    }
+    try {
+        const response = await net.fetch(url, { signal: AbortSignal.timeout(10_000) });
+        if (!response.ok) return { ok: false, error: `The feed server returned ${response.status}.` };
+        return { ok: true, contents: await response.text() };
+    } catch (error: unknown) {
+        return { ok: false, error: error instanceof Error ? error.message : 'Fetching this feed failed.' };
+    }
+});
+
 // ---- Application menu ---------------------------------------------------
 // Menu accelerators are the only reliable way to make browser shortcuts work
 // while a web page has focus: shell-side keydown listeners never see keys that
@@ -1261,6 +1279,8 @@ function setupAppMenu(): void {
                 { type: 'separator' },
                 { label: 'Bookmark Manager', accelerator: 'CmdOrCtrl+Shift+O', click: (): void => sendUiShortcut('open-library') },
                 { label: 'Downloads', accelerator: 'CmdOrCtrl+J', click: (): void => sendUiShortcut('downloads') },
+                { label: 'RSS Reader', click: (): void => sendUiShortcut('open-reader') },
+                { label: 'Modules & Extensions', click: (): void => sendUiShortcut('open-extensions') },
                 { label: 'Find in Page', accelerator: 'CmdOrCtrl+F', click: (): void => sendUiShortcut('find') },
                 { label: 'Focus Address Bar', accelerator: 'CmdOrCtrl+L', click: (): void => sendUiShortcut('focus-address') },
                 { type: 'separator' },

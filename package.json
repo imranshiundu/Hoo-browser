@@ -1,6 +1,6 @@
 {
     "name": "hoo-browser",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "productName": "Hoo Browser",
     "description": "Owl-guided, DuckDuckGo-first desktop browser focused on practical privacy, isolated web apps, and Linux-first freedom.",
     "main": "dist/main/main.js",
